@@ -1,0 +1,16 @@
+[Unit]
+Description=Python inference worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=iii
+WorkingDirectory=/opt/devops-assignment/quickstart/workers/inference-worker
+EnvironmentFile=/etc/iii/inference-worker.env
+ExecStart=/opt/devops-assignment/quickstart/workers/inference-worker/.venv/bin/python inference_worker.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

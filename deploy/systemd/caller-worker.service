@@ -1,0 +1,16 @@
+[Unit]
+Description=TypeScript caller worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=iii
+WorkingDirectory=/opt/devops-assignment/quickstart/workers/caller-worker
+EnvironmentFile=/etc/iii/caller-worker.env
+ExecStart=/usr/bin/node dist/worker.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

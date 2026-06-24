@@ -1,42 +1,23 @@
 import { Logger, registerWorker } from 'iii-sdk';
+import { z } from 'zod';
 
 const iii = registerWorker(process.env.III_URL ?? 'ws://localhost:49134');
 const logger = new Logger();
 
-type ChatMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-};
+const inferenceRequestSchema = z.object({
+  messages: z.array(
+    z.object({
+      role: z.enum(['system', 'user', 'assistant']),
+      content: z.string(),
+    }),
+  ),
+});
 
-type InferenceRequest = {
-  messages: ChatMessage[];
-};
+const inferenceResponseSchema = z.object({
+  text: z.string(),
+});
 
-type InferenceResponse = {
-  text: string;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object');
-}
-
-function isInferenceRequest(value: unknown): value is InferenceRequest {
-  if (!isRecord(value) || !Array.isArray(value.messages)) {
-    return false;
-  }
-
-  return value.messages.every((message) => {
-    return (
-      isRecord(message) &&
-      (message.role === 'system' || message.role === 'user' || message.role === 'assistant') &&
-      typeof message.content === 'string'
-    );
-  });
-}
-
-function isInferenceResponse(value: unknown): value is InferenceResponse {
-  return isRecord(value) && typeof value.text === 'string';
-}
+type InferenceRequest = z.infer<typeof inferenceRequestSchema>;
 
 iii.registerFunction(
   'inference::get_response',
@@ -48,18 +29,26 @@ iii.registerFunction(
       payload,
     });
 
-    if (!isInferenceResponse(result)) {
+    const response = inferenceResponseSchema.safeParse(result);
+
+    if (!response.success) {
       throw new Error('inference::run_inference returned an invalid response');
     }
 
-    return result;
+    return response.data;
+  },
+  {
+    request_format: z.toJSONSchema(inferenceRequestSchema),
+    response_format: z.toJSONSchema(inferenceResponseSchema),
   },
 );
 
 iii.registerFunction(
   'http::run_inference_over_http',
   async (payload: { body: unknown }) => {
-    if (!isInferenceRequest(payload.body)) {
+    const request = inferenceRequestSchema.safeParse(payload.body);
+
+    if (!request.success) {
       return {
         status_code: 400,
         body: { error: 'Request body must contain messages with role and content strings.' },
@@ -69,17 +58,19 @@ iii.registerFunction(
 
     const result = await iii.trigger({
       function_id: 'inference::get_response',
-      payload: payload.body,
+      payload: request.data,
     });
 
-    if (!isInferenceResponse(result)) {
+    const response = inferenceResponseSchema.safeParse(result);
+
+    if (!response.success) {
       throw new Error('inference::get_response returned an invalid response');
     }
 
     logger.info('Running http inference...');
     return {
       status_code: 200,
-      body: result,
+      body: response.data,
       headers: { 'Content-Type': 'application/json' },
     };
   },
