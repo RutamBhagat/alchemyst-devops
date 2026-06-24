@@ -6,7 +6,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 iii = register_worker(
     os.environ.get("III_URL", "ws://localhost:49134"),
-    InitOptions(worker_name="math-worker"),
+    InitOptions(worker_name="inference-worker"),
 )
 logger = Logger()
 
@@ -69,61 +69,19 @@ tokenizer.chat_template = ("""{{ bos_token }}
 '}}
 {%- endif -%}""")
 
-# 3. Run inference
-def run_inference_handler(payload: Dict[str, str | List[Dict[str, Any]]]) -> Dict[str, Any]:
-    # prompt = "Explain quantum entanglement in simple terms."
+def run_inference_handler(payload: Dict[str, str | List[Dict[str, Any]]]) -> Dict[str, str]:
     messages = payload.get("messages", [])
 
     text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = tokenizer(text, return_tensors="pt").to(model.device)
 
-    output = model.generate(**inputs, max_new_tokens=32000)
+    output = model.generate(**inputs, max_new_tokens=256)
     result = tokenizer.decode(output[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
 
-    print(result)
-
-    # running_inference = iii.trigger(
-    #     {
-    #         "function_id": "inference::get",
-    #         "payload": {"scope": "math", "key": "running_inference"},
-    #     }
-    # )
-    # new_result = payload | {"messages": payload["messages"] + (running_inference or [])}
-    # iii.trigger(
-    #     {
-    #         "function_id": "inference::set",
-    #         "payload": {"scope": "math", "key": "running_inference", "value": new_result},
-    #     }
-    # )
-    # result["running_inference"] = new_result
-    return result
-
-# def add_handler(payload: dict) -> dict:
-#     a = payload.get("a", 0)
-#     b = payload.get("b", 0)
-#     logger.info(f"math::add called in Python with a={a}, b={b}")
-#     result = {"c": a + b}
-
-#     # --- Uncomment after: iii worker add iii-state ---
-#     running_total = iii.trigger(
-#         {
-#             "function_id": "state::get",
-#             "payload": {"scope": "math", "key": "running_total"},
-#         }
-#     )
-#     new_total = (running_total or 0) + result["c"]
-#     iii.trigger(
-#         {
-#             "function_id": "state::set",
-#             "payload": {"scope": "math", "key": "running_total", "value": new_total},
-#         }
-#     )
-#     result["running_total"] = new_total
-
-#     return result
+    logger.info(f"inference::run_inference generated {len(result)} characters")
+    return {"text": result}
 
 
-# iii.register_function("math::add", add_handler)
 iii.register_function("inference::run_inference", run_inference_handler)
 
 print("Inference worker started - listening for calls")
