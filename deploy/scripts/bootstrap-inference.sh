@@ -18,7 +18,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git python3 python3-pip python3-venv
+apt-get install -y ca-certificates curl git python3
 
 if ! id iii >/dev/null 2>&1; then
   # Run III services as a locked-down system user instead of root.
@@ -43,9 +43,9 @@ install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.co
 systemctl restart systemd-journald
 
 # Keep Python dependencies local to the checked-out inference worker.
-python3 -m venv "$WORKER_DIR/.venv"
-"$WORKER_DIR/.venv/bin/pip" install --upgrade pip
-"$WORKER_DIR/.venv/bin/pip" install -r "$WORKER_DIR/requirements.txt"
+curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+uv venv "$WORKER_DIR/.venv" --python python3
+uv pip sync --python "$WORKER_DIR/.venv/bin/python" "$WORKER_DIR/requirements.txt"
 
 mkdir -p /opt/iii/huggingface
 
