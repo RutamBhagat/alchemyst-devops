@@ -8,7 +8,6 @@ metadata() {
 }
 
 REPOSITORY_URL="$(metadata repo-url)"
-III_VERSION="$(metadata iii-version)"
 APP_DIR="/opt/devops-assignment"
 
 if [[ -z "$REPOSITORY_URL" ]]; then
@@ -18,14 +17,14 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git jq nginx
+apt-get install -y ca-certificates curl git nginx
 
 if ! id iii >/dev/null 2>&1; then
   # Run III services as a locked-down system user instead of root.
   useradd --system --home-dir /opt/iii --create-home --shell /usr/sbin/nologin iii
 fi
 
-mkdir -p /opt/iii /etc/iii
+mkdir -p /opt/iii
 
 # Reuse an existing checkout on reboot, otherwise create the app directory.
 if [[ -d "$APP_DIR/.git" ]]; then
@@ -39,13 +38,13 @@ fi
 git -C "$APP_DIR" checkout main
 git -C "$APP_DIR" pull --ff-only origin main
 
-# Keep service logs bounded so boot disks do not fill under noisy workers.
+# Do not remove: noisy services can fill small boot disks without a journald cap.
 install -d -m 0755 /etc/systemd/journald.conf.d
-install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.conf.d/iii.conf
+install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.conf.d/60-devops-assignment.conf
 systemctl restart systemd-journald
 
-# Install the III CLI version recorded in Terraform metadata.
-curl -fsSL https://install.iii.dev/iii/main/install.sh | VERSION="$III_VERSION" BIN_DIR=/usr/local/bin sh
+# Install the III CLI version that matches the worker SDK packages.
+curl -fsSL https://install.iii.dev/iii/main/install.sh | VERSION=0.11.0 BIN_DIR=/usr/local/bin sh
 
 install -m 0644 "$APP_DIR/deploy/gateway/iii-config.yaml" /opt/iii/iii-config.yaml
 install -m 0644 "$APP_DIR/deploy/gateway/nginx.conf" /etc/nginx/sites-available/iii-api

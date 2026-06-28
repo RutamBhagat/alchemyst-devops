@@ -11,38 +11,30 @@ terraform {
 
 provider "google" {
   project = var.project_id
-  region  = var.region
-  zone    = var.zone
+  region  = "us-central1"
+  zone    = "us-central1-a"
 }
 
 # These tags are labels Terraform puts on VMs so firewall rules can find them.
 locals {
-  api_tag       = "${var.name_prefix}-api-gateway"
-  caller_tag    = "${var.name_prefix}-caller-worker"
-  inference_tag = "${var.name_prefix}-inference-worker"
-  worker_tags   = [local.caller_tag, local.inference_tag]
-
-  # Each VM reads this metadata during startup to clone the repository.
-  common_metadata = {
-    enable-oslogin = "TRUE"
-    repo-url       = var.repository_url
-    iii-version    = var.iii_version
-  }
+  api_tag       = "alchemyst-devops-api-gateway"
+  caller_tag    = "alchemyst-devops-caller-worker"
+  inference_tag = "alchemyst-devops-inference-worker"
 }
 
 # Creates the VPC network that all machines will join.
 resource "google_compute_network" "main" {
-  name                    = "${var.name_prefix}-vpc"
+  name                    = "alchemyst-devops-vpc"
   # Terraform creates only the subnet below instead of letting Google create defaults.
   auto_create_subnetworks = false
 }
 
 # Creates the private IP range used by the VMs.
 resource "google_compute_subnetwork" "private" {
-  name                     = "${var.name_prefix}-private"
+  name                     = "alchemyst-devops-private"
   # Google assigns worker private IPs from this address range.
-  ip_cidr_range            = var.subnet_cidr
-  region                   = var.region
+  ip_cidr_range            = "10.10.0.0/24"
+  region                   = "us-central1"
   network                  = google_compute_network.main.id
   # Private VMs can still call Google APIs without getting public IPs.
   private_ip_google_access = true
@@ -50,16 +42,16 @@ resource "google_compute_subnetwork" "private" {
 
 # Cloud NAT needs this router to attach NAT to the VPC.
 resource "google_compute_router" "main" {
-  name    = "${var.name_prefix}-router"
-  region  = var.region
+  name    = "alchemyst-devops-router"
+  region  = "us-central1"
   network = google_compute_network.main.id
 }
 
 # Lets private VMs reach the internet without giving them public IPs.
 resource "google_compute_router_nat" "main" {
-  name                               = "${var.name_prefix}-nat"
+  name                               = "alchemyst-devops-nat"
   router                             = google_compute_router.main.name
-  region                             = var.region
+  region                             = "us-central1"
   # Google creates the public IPs used by NAT automatically.
   nat_ip_allocate_option             = "AUTO_ONLY"
   # Only subnets listed in this resource will use this NAT.
@@ -74,13 +66,13 @@ resource "google_compute_router_nat" "main" {
 
 # Reserves one stable public IP for the API gateway.
 resource "google_compute_address" "api" {
-  name   = "${var.name_prefix}-api-ip"
-  region = var.region
+  name   = "alchemyst-devops-api-ip"
+  region = "us-central1"
 }
 
 # Allows public HTTP traffic only to the API gateway VM.
 resource "google_compute_firewall" "api_http" {
-  name    = "${var.name_prefix}-allow-api-http"
+  name    = "alchemyst-devops-allow-api-http"
   network = google_compute_network.main.name
 
   allow {
@@ -96,7 +88,7 @@ resource "google_compute_firewall" "api_http" {
 
 # Allows SSH only through Google IAP, not directly from the internet.
 resource "google_compute_firewall" "iap_ssh" {
-  name    = "${var.name_prefix}-allow-iap-ssh"
+  name    = "alchemyst-devops-allow-iap-ssh"
   network = google_compute_network.main.name
 
   allow {
@@ -111,7 +103,7 @@ resource "google_compute_firewall" "iap_ssh" {
 
 # Allows worker VMs to talk to the gateway inside the private network.
 resource "google_compute_firewall" "worker_rpc" {
-  name    = "${var.name_prefix}-allow-worker-rpc"
+  name    = "alchemyst-devops-allow-worker-rpc"
   network = google_compute_network.main.name
 
   allow {
@@ -121,22 +113,22 @@ resource "google_compute_firewall" "worker_rpc" {
   }
 
   # Only worker-tagged VMs can send this traffic to the gateway-tagged VM.
-  source_tags = local.worker_tags
+  source_tags = [local.caller_tag, local.inference_tag]
   target_tags = [local.api_tag]
 }
 
 # Creates the API gateway VM with both private and public networking.
 resource "google_compute_instance" "api_gateway" {
-  name         = "${var.name_prefix}-api-gateway"
-  machine_type = var.api_machine_type
-  zone         = var.zone
+  name         = "alchemyst-devops-api-gateway"
+  machine_type = "e2-small"
+  zone         = "us-central1-a"
   # Firewall rules use this tag to identify the gateway.
   tags         = [local.api_tag]
 
   boot_disk {
     initialize_params {
       # Google creates a new boot disk from this image.
-      image = var.boot_image
+      image = "debian-cloud/debian-12"
       size  = 20
       type  = "pd-balanced"
     }
@@ -145,7 +137,7 @@ resource "google_compute_instance" "api_gateway" {
   network_interface {
     subnetwork = google_compute_subnetwork.private.id
     # Gives the gateway a fixed private IP so workers know where to connect.
-    network_ip = var.gateway_private_ip
+    network_ip = "10.10.0.10"
 
     access_config {
       # Attaches the reserved public IP to the gateway.
@@ -154,14 +146,13 @@ resource "google_compute_instance" "api_gateway" {
   }
 
   # Startup scripts read this metadata from the VM metadata service.
-  metadata = merge(local.common_metadata, {
-    engine-url = "ws://${var.gateway_private_ip}:49134"
-  })
+  metadata = {
+    enable-oslogin = "TRUE"
+    repo-url        = var.repository_url
+  }
 
   # This script runs when the VM boots for the first time.
   metadata_startup_script = file("${path.module}/../../deploy/scripts/bootstrap-gateway.sh")
-
-  allow_stopping_for_update = true
 
   # NAT must exist before startup so the VM can download packages and code.
   depends_on = [google_compute_router_nat.main]
@@ -169,15 +160,15 @@ resource "google_compute_instance" "api_gateway" {
 
 # Creates the caller worker VM with private networking only.
 resource "google_compute_instance" "caller_worker" {
-  name         = "${var.name_prefix}-caller-worker"
-  machine_type = var.caller_machine_type
-  zone         = var.zone
+  name         = "alchemyst-devops-caller-worker"
+  machine_type = "e2-small"
+  zone         = "us-central1-a"
   # Firewall rules use this tag to identify the caller worker.
   tags         = [local.caller_tag]
 
   boot_disk {
     initialize_params {
-      image = var.boot_image
+      image = "debian-cloud/debian-12"
       size  = 20
       type  = "pd-balanced"
     }
@@ -188,13 +179,12 @@ resource "google_compute_instance" "caller_worker" {
     subnetwork = google_compute_subnetwork.private.id
   }
 
-  metadata = merge(local.common_metadata, {
-    engine-url = "ws://${var.gateway_private_ip}:49134"
-  })
+  metadata = {
+    enable-oslogin = "TRUE"
+    repo-url        = var.repository_url
+  }
 
   metadata_startup_script = file("${path.module}/../../deploy/scripts/bootstrap-caller.sh")
-
-  allow_stopping_for_update = true
 
   # The worker starts after gateway and NAT are ready.
   depends_on = [
@@ -205,15 +195,15 @@ resource "google_compute_instance" "caller_worker" {
 
 # Creates the inference worker VM with private networking and a larger disk.
 resource "google_compute_instance" "inference_worker" {
-  name         = "${var.name_prefix}-inference-worker"
-  machine_type = var.inference_machine_type
-  zone         = var.zone
+  name         = "alchemyst-devops-inference-worker"
+  machine_type = "e2-standard-4"
+  zone         = "us-central1-a"
   # Firewall rules use this tag to identify the inference worker.
   tags         = [local.inference_tag]
 
   boot_disk {
     initialize_params {
-      image = var.boot_image
+      image = "debian-cloud/debian-12"
       # Inference gets more disk space for runtime files and model data.
       size  = 50
       type  = "pd-balanced"
@@ -225,13 +215,12 @@ resource "google_compute_instance" "inference_worker" {
     subnetwork = google_compute_subnetwork.private.id
   }
 
-  metadata = merge(local.common_metadata, {
-    engine-url = "ws://${var.gateway_private_ip}:49134"
-  })
+  metadata = {
+    enable-oslogin = "TRUE"
+    repo-url        = var.repository_url
+  }
 
   metadata_startup_script = file("${path.module}/../../deploy/scripts/bootstrap-inference.sh")
-
-  allow_stopping_for_update = true
 
   depends_on = [
     google_compute_instance.api_gateway,

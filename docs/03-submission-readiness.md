@@ -58,13 +58,7 @@ corresponding worker logs.
    `terraform validate`, `terraform apply`, and cloud network checks could not
    be executed from this workspace.
 
-3. Verify iii engine and SDK version compatibility.
-
-   The deployment installs iii `0.12.0`, while both SDK dependencies are pinned
-   to `0.11.0`. Either prove that exact mix works in deployment or align the
-   versions before submitting.
-
-4. Tighten runtime reproducibility if time allows.
+3. Tighten runtime reproducibility if time allows.
 
    Python dependencies are mostly unpinned, and the caller worker bootstrap uses
    `npm install` instead of `npm ci`. This is not the central assignment
@@ -89,7 +83,7 @@ hardening work, not an assignment blocker.
 A local `iii --config quickstart/config.yaml` smoke test started the engine and
 showed the worker manager listening on `0.0.0.0:49134`. That supports the
 private-VM RPC design, but it was run with local iii `0.19.7`, not the deployed
-`0.12.0`, so it does not prove deployed behavior.
+`0.11.0`, so it does not prove deployed behavior.
 
 ## Final Submission Checklist
 

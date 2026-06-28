@@ -8,12 +8,11 @@ metadata() {
 }
 
 REPOSITORY_URL="$(metadata repo-url)"
-ENGINE_URL="$(metadata engine-url)"
 APP_DIR="/opt/devops-assignment"
 WORKER_DIR="$APP_DIR/quickstart/workers/caller-worker"
 
-if [[ -z "$REPOSITORY_URL" || -z "$ENGINE_URL" ]]; then
-  echo "metadata attributes repo-url and engine-url are required" >&2
+if [[ -z "$REPOSITORY_URL" ]]; then
+  echo "metadata attribute repo-url is required" >&2
   exit 1
 fi
 
@@ -38,23 +37,16 @@ fi
 git -C "$APP_DIR" checkout main
 git -C "$APP_DIR" pull --ff-only origin main
 
-# Keep service logs bounded so boot disks do not fill under noisy workers.
+# Do not remove: noisy services can fill small boot disks without a journald cap.
 install -d -m 0755 /etc/systemd/journald.conf.d
-install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.conf.d/iii.conf
+install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.conf.d/60-devops-assignment.conf
 systemctl restart systemd-journald
 
-# Build the worker before systemd starts it from the checked-out tree.
 npm --prefix "$WORKER_DIR" install
 npm --prefix "$WORKER_DIR" run build
 
-mkdir -p /etc/iii
-# Systemd reads the private gateway URL from this environment file.
-cat >/etc/iii/caller-worker.env <<EOF
-III_URL=$ENGINE_URL
-EOF
-
 install -m 0644 "$APP_DIR/deploy/systemd/caller-worker.service" /etc/systemd/system/caller-worker.service
-chown -R iii:iii /opt/iii "$APP_DIR" /etc/iii
+chown -R iii:iii /opt/iii "$APP_DIR"
 
 systemctl daemon-reload
 systemctl enable --now caller-worker

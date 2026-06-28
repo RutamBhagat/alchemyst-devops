@@ -8,12 +8,11 @@ metadata() {
 }
 
 REPOSITORY_URL="$(metadata repo-url)"
-ENGINE_URL="$(metadata engine-url)"
 APP_DIR="/opt/devops-assignment"
 WORKER_DIR="$APP_DIR/quickstart/workers/inference-worker"
 
-if [[ -z "$REPOSITORY_URL" || -z "$ENGINE_URL" ]]; then
-  echo "metadata attributes repo-url and engine-url are required" >&2
+if [[ -z "$REPOSITORY_URL" ]]; then
+  echo "metadata attribute repo-url is required" >&2
   exit 1
 fi
 
@@ -38,9 +37,9 @@ fi
 git -C "$APP_DIR" checkout main
 git -C "$APP_DIR" pull --ff-only origin main
 
-# Keep service logs bounded so boot disks do not fill under noisy workers.
+# Do not remove: noisy services can fill small boot disks without a journald cap.
 install -d -m 0755 /etc/systemd/journald.conf.d
-install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.conf.d/iii.conf
+install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.conf.d/60-devops-assignment.conf
 systemctl restart systemd-journald
 
 # Keep Python dependencies local to the checked-out inference worker.
@@ -48,15 +47,10 @@ python3 -m venv "$WORKER_DIR/.venv"
 "$WORKER_DIR/.venv/bin/pip" install --upgrade pip
 "$WORKER_DIR/.venv/bin/pip" install -r "$WORKER_DIR/requirements.txt"
 
-mkdir -p /etc/iii /opt/iii/huggingface
-# Systemd reads the private gateway URL and model cache path from this file.
-cat >/etc/iii/inference-worker.env <<EOF
-III_URL=$ENGINE_URL
-HF_HOME=/opt/iii/huggingface
-EOF
+mkdir -p /opt/iii/huggingface
 
 install -m 0644 "$APP_DIR/deploy/systemd/inference-worker.service" /etc/systemd/system/inference-worker.service
-chown -R iii:iii /opt/iii "$APP_DIR" /etc/iii
+chown -R iii:iii /opt/iii "$APP_DIR"
 
 systemctl daemon-reload
 systemctl enable --now inference-worker

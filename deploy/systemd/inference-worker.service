@@ -4,10 +4,10 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
 User=iii
 WorkingDirectory=/opt/devops-assignment/quickstart/workers/inference-worker
-EnvironmentFile=/etc/iii/inference-worker.env
+Environment=III_URL=ws://10.10.0.10:49134
+Environment=HF_HOME=/opt/iii/huggingface
 ExecStart=/opt/devops-assignment/quickstart/workers/inference-worker/.venv/bin/python inference_worker.py
 Restart=always
 RestartSec=5

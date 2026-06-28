@@ -4,10 +4,9 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
 User=iii
 WorkingDirectory=/opt/devops-assignment/quickstart/workers/caller-worker
-EnvironmentFile=/etc/iii/caller-worker.env
+Environment=III_URL=ws://10.10.0.10:49134
 ExecStart=/usr/bin/node dist/worker.js
 Restart=always
 RestartSec=5

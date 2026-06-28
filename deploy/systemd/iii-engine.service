@@ -4,7 +4,6 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
 User=iii
 WorkingDirectory=/opt/iii
 ExecStart=/usr/local/bin/iii --config /opt/iii/iii-config.yaml
