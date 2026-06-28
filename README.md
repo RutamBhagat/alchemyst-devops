@@ -7,35 +7,7 @@ This repository contains a reproducible deployment for the Alchemyst DevOps inte
 
 ## Architecture
 
-```text
-Internet
-  |
-  | POST /v1/chat/completions
-  v
-+----------------------------------+
-| api-gateway VM                   |
-| public IP: yes                   |
-| private IP: 10.10.0.10           |
-|                                  |
-| nginx :80                        |
-|   -> iii-http 127.0.0.1:3111     |
-|                                  |
-| iii engine WebSocket :49134      |
-+----------------+-----------------+
-                 ^
-                 | ws://10.10.0.10:49134
-       +---------+----------+      +----------------------+
-       | caller-worker VM   |      | inference-worker VM  |
-       | public IP: no      |      | public IP: no        |
-       | TypeScript worker  |      | Python worker        |
-       | registers:         |      | registers:           |
-       | inference::        |      | inference::          |
-       |   get_response     |      |   run_inference      |
-       | http::             |      +----------------------+
-       |   run_inference_   |
-       |   over_http        |
-       +--------------------+
-```
+<img width="1536" height="1024" alt="ChatGPT Image Jun 28, 2026, 11_38_02 AM" src="https://github.com/user-attachments/assets/2e4c0d53-70e5-4692-ac28-dc0703ec2e58" />
 
 Request flow:
 
