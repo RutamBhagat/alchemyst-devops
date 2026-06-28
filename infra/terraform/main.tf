@@ -129,7 +129,7 @@ resource "google_compute_instance" "api_gateway" {
     initialize_params {
       # Google creates a new boot disk from this image.
       image = "debian-cloud/debian-12"
-      size  = 20
+      size  = 15
       type  = "pd-balanced"
     }
   }
@@ -169,7 +169,7 @@ resource "google_compute_instance" "caller_worker" {
   boot_disk {
     initialize_params {
       image = "debian-cloud/debian-12"
-      size  = 20
+      size  = 15
       type  = "pd-balanced"
     }
   }
@@ -196,7 +196,7 @@ resource "google_compute_instance" "caller_worker" {
 # Creates the inference worker VM with private networking and a larger disk.
 resource "google_compute_instance" "inference_worker" {
   name         = "alchemyst-devops-inference-worker"
-  machine_type = "e2-standard-4"
+  machine_type = "e2-standard-2"
   zone         = "us-central1-a"
   # Firewall rules use this tag to identify the inference worker.
   tags         = [local.inference_tag]
@@ -205,7 +205,7 @@ resource "google_compute_instance" "inference_worker" {
     initialize_params {
       image = "debian-cloud/debian-12"
       # Inference gets more disk space for runtime files and model data.
-      size  = 50
+      size  = 30
       type  = "pd-balanced"
     }
   }

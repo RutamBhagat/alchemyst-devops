@@ -89,9 +89,9 @@ Recommended instance sizes:
 
 | VM | Machine type | Disk | Reason |
 | --- | --- | --- | --- |
-| `api-gateway` | `e2-small` | 20 GB | Runs iii engine, `iii-http`, and reverse proxy. |
-| `caller-worker` | `e2-small` | 20 GB | Runs the lightweight TypeScript worker. |
-| `inference-worker` | `e2-standard-4` | 50 GB | Runs PyTorch, Transformers, and the small GGUF model on CPU. |
+| `api-gateway` | `e2-small` | 15 GB | Runs iii engine, `iii-http`, and reverse proxy. |
+| `caller-worker` | `e2-small` | 15 GB | Runs the lightweight TypeScript worker. |
+| `inference-worker` | `e2-standard-2` | 30 GB | Runs PyTorch, Transformers, and the small GGUF model on CPU. |
 
 Cloud NAT is required because private workers need outbound access during
 bootstrap for apt, npm, PyPI, and Hugging Face model downloads. Private Google
