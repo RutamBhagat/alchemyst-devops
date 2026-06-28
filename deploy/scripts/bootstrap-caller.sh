@@ -18,7 +18,9 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git nodejs npm
+apt-get install -y ca-certificates curl git
+curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+apt-get install -y nodejs
 
 if ! id iii >/dev/null 2>&1; then
   # Run III services as a locked-down system user instead of root.
@@ -42,7 +44,7 @@ install -d -m 0755 /etc/systemd/journald.conf.d
 install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.conf.d/60-devops-assignment.conf
 systemctl restart systemd-journald
 
-npm --prefix "$WORKER_DIR" install
+npm --prefix "$WORKER_DIR" ci
 npm --prefix "$WORKER_DIR" run build
 
 install -m 0644 "$APP_DIR/deploy/systemd/caller-worker.service" /etc/systemd/system/caller-worker.service
