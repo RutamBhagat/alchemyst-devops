@@ -74,60 +74,21 @@ deploy/
   systemd/                            # one service per runtime process
 ```
 
-## Deploy From Scratch
+## Deployment Guides
 
-Prerequisites:
+Use a throwaway GCP project for deployment testing, then destroy it immediately
+after collecting smoke-test evidence.
 
-- A GCP project with billing enabled.
-- `gcloud` authenticated locally.
-- Terraform installed locally.
-- This repository pushed to a Git URL reachable from the VMs.
+- [Deploy and smoke test](docs/04-deploy-and-smoke-test.md)
+- [Teardown](docs/05-teardown.md)
 
-Enable the Compute Engine API:
+The deployment guide covers Google Cloud CLI installation, Terraform
+installation, `gcloud` login, throwaway project creation, API enablement,
+Terraform deploy, service checks, API smoke tests, and network checks.
 
-```bash
-gcloud config set project <project-id>
-gcloud services enable compute.googleapis.com
-```
-
-Deploy:
-
-```bash
-cd infra/terraform
-terraform init
-terraform apply \
-  -var="project_id=<project-id>" \
-  -var="repository_url=https://github.com/<user>/<repo>.git"
-```
-
-The startup scripts clone `repository_url` on each VM, check out `main`, install the required runtime, install iii `0.11.0` on the gateway, and start the systemd services.
-
-Check service status through IAP:
-
-```bash
-gcloud compute ssh alchemyst-devops-api-gateway \
-  --tunnel-through-iap \
-  --zone us-central1-a \
-  --command "systemctl status iii-engine nginx"
-
-gcloud compute ssh alchemyst-devops-caller-worker \
-  --tunnel-through-iap \
-  --zone us-central1-a \
-  --command "systemctl status caller-worker"
-
-gcloud compute ssh alchemyst-devops-inference-worker \
-  --tunnel-through-iap \
-  --zone us-central1-a \
-  --command "systemctl status inference-worker"
-```
-
-Destroy:
-
-```bash
-terraform -chdir=infra/terraform destroy \
-  -var="project_id=<project-id>" \
-  -var="repository_url=https://github.com/<user>/<repo>.git"
-```
+The teardown guide covers `terraform destroy`, verification that named
+resources are gone, manual deletion commands if Terraform cleanup fails,
+billing unlink, and project deletion.
 
 ## Network Checks
 
