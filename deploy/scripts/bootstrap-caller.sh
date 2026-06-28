@@ -2,12 +2,12 @@
 set -euo pipefail
 
 metadata() {
+  # Terraform passes deploy-time settings through VM metadata attributes.
   curl -fsS -H "Metadata-Flavor: Google" \
     "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"
 }
 
 REPOSITORY_URL="$(metadata repo-url)"
-REPOSITORY_REF="$(metadata repo-ref)"
 ENGINE_URL="$(metadata engine-url)"
 APP_DIR="/opt/devops-assignment"
 WORKER_DIR="$APP_DIR/quickstart/workers/caller-worker"
@@ -22,9 +22,11 @@ apt-get update
 apt-get install -y ca-certificates curl git nodejs npm
 
 if ! id iii >/dev/null 2>&1; then
+  # Run III services as a locked-down system user instead of root.
   useradd --system --home-dir /opt/iii --create-home --shell /usr/sbin/nologin iii
 fi
 
+# Reuse an existing checkout on reboot, otherwise create the app directory.
 if [[ -d "$APP_DIR/.git" ]]; then
   git -C "$APP_DIR" fetch --prune origin
 else
@@ -32,17 +34,21 @@ else
   git clone "$REPOSITORY_URL" "$APP_DIR"
 fi
 
-git -C "$APP_DIR" checkout "$REPOSITORY_REF"
-git -C "$APP_DIR" pull --ff-only || true
+# Startup always runs the repository's main branch.
+git -C "$APP_DIR" checkout main
+git -C "$APP_DIR" pull --ff-only origin main
 
+# Keep service logs bounded so boot disks do not fill under noisy workers.
 install -d -m 0755 /etc/systemd/journald.conf.d
 install -m 0644 "$APP_DIR/deploy/systemd/journald.conf" /etc/systemd/journald.conf.d/iii.conf
 systemctl restart systemd-journald
 
+# Build the worker before systemd starts it from the checked-out tree.
 npm --prefix "$WORKER_DIR" install
 npm --prefix "$WORKER_DIR" run build
 
 mkdir -p /etc/iii
+# Systemd reads the private gateway URL from this environment file.
 cat >/etc/iii/caller-worker.env <<EOF
 III_URL=$ENGINE_URL
 EOF

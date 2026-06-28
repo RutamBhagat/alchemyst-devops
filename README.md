@@ -125,11 +125,10 @@ cd infra/terraform
 terraform init
 terraform apply \
   -var="project_id=<project-id>" \
-  -var="repository_url=https://github.com/<user>/<repo>.git" \
-  -var="repository_ref=<branch-or-commit>"
+  -var="repository_url=https://github.com/<user>/<repo>.git"
 ```
 
-The startup scripts clone `repository_url` on each VM, install the required runtime, install iii `0.11.0` on the gateway, and start the systemd services.
+The startup scripts clone `repository_url` on each VM, check out `main`, install the required runtime, install iii `0.11.0` on the gateway, and start the systemd services.
 
 Check service status through IAP:
 

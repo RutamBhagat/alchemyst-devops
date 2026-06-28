@@ -100,8 +100,7 @@ terraform -chdir=infra/terraform init
 terraform -chdir=infra/terraform validate
 terraform -chdir=infra/terraform apply \
   -var="project_id=<project-id>" \
-  -var="repository_url=https://github.com/<user>/<repo>.git" \
-  -var="repository_ref=<branch-or-commit>"
+  -var="repository_url=https://github.com/<user>/<repo>.git"
 ```
 
 Then prove the public API:

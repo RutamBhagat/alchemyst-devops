@@ -26,12 +26,6 @@ variable "repository_url" {
   type        = string
 }
 
-variable "repository_ref" {
-  description = "Git branch, tag, or commit to checkout after cloning."
-  type        = string
-  default     = "main"
-}
-
 variable "iii_version" {
   description = "iii engine version installed on the gateway. Keep this minor line aligned with the SDK packages."
   type        = string

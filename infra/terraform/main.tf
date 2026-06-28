@@ -22,11 +22,10 @@ locals {
   inference_tag = "${var.name_prefix}-inference-worker"
   worker_tags   = [local.caller_tag, local.inference_tag]
 
-  # Each VM reads this metadata during startup to clone the right repository version.
+  # Each VM reads this metadata during startup to clone the repository.
   common_metadata = {
     enable-oslogin = "TRUE"
     repo-url       = var.repository_url
-    repo-ref       = var.repository_ref
     iii-version    = var.iii_version
   }
 }
