@@ -85,13 +85,16 @@ Provision these resources with Terraform:
 - firewall rules for public API ingress, private iii WebSocket ingress, and IAP
   SSH
 
-Recommended instance sizes:
+Cost-minimized instance sizes:
 
 | VM | Machine type | Disk | Reason |
 | --- | --- | --- | --- |
-| `api-gateway` | `e2-small` | 15 GB | Runs iii engine, `iii-http`, and reverse proxy. |
-| `caller-worker` | `e2-small` | 15 GB | Runs the lightweight TypeScript worker. |
-| `inference-worker` | `e2-standard-2` | 30 GB | Runs PyTorch, Transformers, and the small GGUF model on CPU. |
+| `api-gateway` | `e2-micro` | 10 GB | Runs iii engine, `iii-http`, and reverse proxy. |
+| `caller-worker` | `e2-micro` | 10 GB | Runs the lightweight TypeScript worker. |
+| `inference-worker` | `e2-medium` | 25 GB | Runs PyTorch, Transformers, and the small GGUF model on CPU. |
+
+This is the absolute cost-minimized profile. The safer submission profile is
+`e2-small`, `e2-small`, and `e2-standard-2` with 15 GB, 15 GB, and 30 GB disks.
 
 Cloud NAT is required because private workers need outbound access during
 bootstrap for apt, npm, PyPI, and Hugging Face model downloads. Private Google

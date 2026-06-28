@@ -120,7 +120,7 @@ resource "google_compute_firewall" "worker_rpc" {
 # Creates the API gateway VM with both private and public networking.
 resource "google_compute_instance" "api_gateway" {
   name         = "alchemyst-devops-api-gateway"
-  machine_type = "e2-small"
+  machine_type = "e2-micro"
   zone         = "us-central1-a"
   # Firewall rules use this tag to identify the gateway.
   tags         = [local.api_tag]
@@ -129,7 +129,7 @@ resource "google_compute_instance" "api_gateway" {
     initialize_params {
       # Google creates a new boot disk from this image.
       image = "debian-cloud/debian-12"
-      size  = 15
+      size  = 10
       type  = "pd-balanced"
     }
   }
@@ -161,7 +161,7 @@ resource "google_compute_instance" "api_gateway" {
 # Creates the caller worker VM with private networking only.
 resource "google_compute_instance" "caller_worker" {
   name         = "alchemyst-devops-caller-worker"
-  machine_type = "e2-small"
+  machine_type = "e2-micro"
   zone         = "us-central1-a"
   # Firewall rules use this tag to identify the caller worker.
   tags         = [local.caller_tag]
@@ -169,7 +169,7 @@ resource "google_compute_instance" "caller_worker" {
   boot_disk {
     initialize_params {
       image = "debian-cloud/debian-12"
-      size  = 15
+      size  = 10
       type  = "pd-balanced"
     }
   }
@@ -196,7 +196,7 @@ resource "google_compute_instance" "caller_worker" {
 # Creates the inference worker VM with private networking and a larger disk.
 resource "google_compute_instance" "inference_worker" {
   name         = "alchemyst-devops-inference-worker"
-  machine_type = "e2-standard-2"
+  machine_type = "e2-medium"
   zone         = "us-central1-a"
   # Firewall rules use this tag to identify the inference worker.
   tags         = [local.inference_tag]
@@ -205,7 +205,7 @@ resource "google_compute_instance" "inference_worker" {
     initialize_params {
       image = "debian-cloud/debian-12"
       # Inference gets more disk space for runtime files and model data.
-      size  = 30
+      size  = 25
       type  = "pd-balanced"
     }
   }
