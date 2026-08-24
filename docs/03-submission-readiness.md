@@ -8,7 +8,8 @@
 - OCI image discovery explicitly selects Ubuntu 24.04 Minimal for x86_64 and Arm64.
 - Only the OCI gateway can receive a public IP; RPC/49134 is restricted to the worker NSG.
 - Application services are Dockerized; there are no application systemd units or bootstrap scripts.
-- OCI cloud-init installs Docker/Compose, clones the repo, and starts a role-specific Compose file.
+- OCI cloud-init installs Docker/Compose, checks out an exact `DEPLOY_REF`, and starts a role-specific Compose file.
+- GitHub Actions validates builds, reports container vulnerabilities, produces CycloneDX SBOMs, previews Pulumi when enabled, deploys successful `main` revisions, smoke-tests them, and can roll back to the previous deployed commit.
 - A second Pulumi stack targets Floci ECS; Floci launches the same locally built application images as real Docker containers.
 - No application Docker registry is required.
 

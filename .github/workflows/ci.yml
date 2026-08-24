@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            infra/pulumi/package-lock.json
+            quickstart/workers/caller-worker/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install Pulumi dependencies
+        run: npm --prefix infra/pulumi ci
+      - name: Typecheck Pulumi
+        run: npm --prefix infra/pulumi run typecheck
+      - name: Build caller worker
+        run: |
+          npm --prefix quickstart/workers/caller-worker ci
+          npm --prefix quickstart/workers/caller-worker run build
+      - name: Check Python worker
+        run: python -m py_compile quickstart/workers/inference-worker/inference_worker.py
+      - name: Validate Compose
+        run: |
+          for file in deploy/docker/*.compose.yaml; do
+            docker compose -f "$file" config -q
+          done
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Build CI images
+        run: docker compose -f deploy/docker/build.compose.yaml build
+      - name: Verify production Arm inference build
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --file deploy/docker/inference.Dockerfile \
+            --output type=cacheonly .
+      - name: Scan iii engine
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: alchemyst/iii-engine:local
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+      - name: Scan gateway proxy
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: alchemyst/gateway-proxy:local
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+      - name: Scan caller
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: alchemyst/caller:local
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+      - name: Scan inference
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          image-ref: alchemyst/inference:local
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+      - name: SBOM iii engine
+        uses: anchore/sbom-action@v0
+        with:
+          image: alchemyst/iii-engine:local
+          artifact-name: sbom-iii-engine
+          format: cyclonedx-json
+          upload-release-assets: false
+      - name: SBOM gateway proxy
+        uses: anchore/sbom-action@v0
+        with:
+          image: alchemyst/gateway-proxy:local
+          artifact-name: sbom-gateway-proxy
+          format: cyclonedx-json
+          upload-release-assets: false
+      - name: SBOM caller
+        uses: anchore/sbom-action@v0
+        with:
+          image: alchemyst/caller:local
+          artifact-name: sbom-caller
+          format: cyclonedx-json
+          upload-release-assets: false
+      - name: SBOM inference
+        uses: anchore/sbom-action@v0
+        with:
+          image: alchemyst/inference:local
+          artifact-name: sbom-inference
+          format: cyclonedx-json
+          upload-release-assets: false
+      - name: Check diff whitespace
+        run: git diff --check
+
+  oci-preview:
+    needs: validate
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && vars.ENABLE_OCI_PREVIEW == 'true'
+    runs-on: ubuntu-24.04
+    environment: production-preview
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      DEPLOY_REF: ${{ github.event.pull_request.head.sha }}
+      PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+      TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+      TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+      TF_VAR_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
+      TF_VAR_region: ${{ secrets.OCI_REGION }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: npm --prefix infra/pulumi ci
+      - name: Pulumi preview
+        uses: pulumi/actions@v7
+        with:
+          command: preview
+          pulumi-version: 3.259.0
+          stack-name: ${{ vars.PULUMI_STACK || 'dev' }}
+          work-dir: infra/pulumi/oci
+          comment-on-pr: true
+          diff: true

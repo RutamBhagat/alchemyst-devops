@@ -81,7 +81,7 @@ Terraform and the application-level systemd units/bootstrap scripts have been re
 
 ## Deploy
 
-See [Deploy and smoke test](docs/04-deploy-and-smoke-test.md) and [Teardown](docs/05-teardown.md).
+See [Deploy and smoke test](docs/04-deploy-and-smoke-test.md), [Registry-free CI/CD](docs/06-cicd.md), and [Teardown](docs/05-teardown.md).
 
 Minimal local validation:
 
@@ -108,7 +108,7 @@ Pulumi selects the newest compatible **Canonical Ubuntu 24.04 Minimal** platform
 
 ## Container Images and Registries
 
-Application images are built locally from this repository; there is no application-image registry dependency and no `docker push` step. OCI builds on each VM during cloud-init, while the Floci workflow builds once on the development machine before `pulumi up`.
+Application images are built locally from this repository; there is no application-image registry dependency and no `docker push` step. CI builds/scans the images without publishing them. OCI deployments are pinned to an exact Git commit via `DEPLOY_REF`, then each replacement VM builds that revision locally during cloud-init. Floci builds once on the development machine before `pulumi up`.
 
 The Dockerfiles still pull public base images (`ubuntu`, `nginx`, `node`, `python`) and Python/npm dependencies. Eliminating all registry/package-network access would require pre-baked OCI VM images or exported `docker save` artifacts.
 
@@ -122,6 +122,6 @@ The Dockerfiles still pull public base images (`ubuntu`, `nginx`, `node`, `pytho
 
 ## Production Hardening
 
-Before production: TLS, authentication/rate limiting, managed observability, immutable prebuilt images, secret management, least-privilege instance identities, request limits/timeouts, and a production model-serving tier instead of first-start model downloads.
+CI/CD now covers build validation, vulnerability reporting, SBOM generation, commit-pinned deployment, smoke verification, and rollback to the previous deployed commit. Remaining production hardening includes TLS, authentication/rate limiting, managed observability, secret management, least-privilege instance identities, request limits/timeouts, and immutable prebuilt application artifacts if a registry/artifact service is later accepted.
 
 If the model were 100x larger, inference would move to GPU-backed serving such as vLLM/TGI with pre-staged weights, independent autoscaling, queueing/backpressure, and streaming. The public/private network boundary remains the same.

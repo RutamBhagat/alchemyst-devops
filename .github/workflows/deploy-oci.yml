@@ -1,0 +1,110 @@
+name: Deploy OCI
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: Git commit/tag to deploy or roll back to
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oci-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && vars.ENABLE_OCI_DEPLOY == 'true')
+    runs-on: ubuntu-24.04
+    environment: production
+    env:
+      DEPLOY_REF: ${{ inputs.deploy_ref || github.event.workflow_run.head_sha }}
+      PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+      TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+      TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+      TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+      TF_VAR_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
+      TF_VAR_region: ${{ secrets.OCI_REGION }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: npm --prefix infra/pulumi ci
+      - name: Read previous deployment
+        id: previous
+        continue-on-error: true
+        uses: pulumi/actions@v7
+        with:
+          command: output
+          pulumi-version: 3.259.0
+          stack-name: ${{ vars.PULUMI_STACK || 'dev' }}
+          work-dir: infra/pulumi/oci
+      - name: Deploy exact revision
+        id: deploy
+        uses: pulumi/actions@v7
+        with:
+          command: up
+          pulumi-version: 3.259.0
+          stack-name: ${{ vars.PULUMI_STACK || 'dev' }}
+          work-dir: infra/pulumi/oci
+          refresh: true
+          diff: true
+      - name: Smoke test deployment
+        id: smoke
+        continue-on-error: true
+        env:
+          API_URL: ${{ steps.deploy.outputs.apiUrl }}
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 24); do
+            status="$(curl -sS -o /tmp/inference.json -w '%{http_code}' -m 30 \
+              -X POST "$API_URL" \
+              -H 'Content-Type: application/json' \
+              -d '{"messages":[{"role":"user","content":"Reply with one short sentence."}]}' || true)"
+            if [ "$status" = 200 ] && python3 -c 'import json; d=json.load(open("/tmp/inference.json")); assert isinstance(d.get("text"), str) and d["text"].strip()'; then
+              ok=1
+              break
+            fi
+            sleep 15
+          done
+          test "$ok" = 1
+
+          bad_status="$(curl -sS -o /tmp/invalid.json -w '%{http_code}' -m 30 \
+            -X POST "$API_URL" -H 'Content-Type: application/json' -d '{"bad":true}' || true)"
+          test "$bad_status" = 400
+
+          host="${API_URL#http://}"
+          host="${host%%/*}"
+          host="${host%%:*}"
+          if timeout 5 bash -c "</dev/tcp/$host/49134" 2>/dev/null; then
+            echo 'gateway RPC port 49134 is unexpectedly public' >&2
+            exit 1
+          fi
+      - name: Roll back failed smoke test
+        if: steps.smoke.outcome == 'failure' && steps.previous.outputs.deployedRef != '' && steps.previous.outputs.deployedRef != env.DEPLOY_REF
+        env:
+          DEPLOY_REF: ${{ steps.previous.outputs.deployedRef }}
+        uses: pulumi/actions@v7
+        with:
+          command: up
+          pulumi-version: 3.259.0
+          stack-name: ${{ vars.PULUMI_STACK || 'dev' }}
+          work-dir: infra/pulumi/oci
+          refresh: true
+          diff: true
+      - name: Fail after unsuccessful verification
+        if: steps.smoke.outcome == 'failure'
+        run: |
+          echo 'Deployment smoke test failed; rollback was attempted when a previous deployedRef was available.' >&2
+          exit 1

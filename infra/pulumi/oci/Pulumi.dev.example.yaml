@@ -6,3 +6,5 @@ config:
   # Optional image overrides; otherwise Pulumi selects current Ubuntu 24.04 images by shape.
   # alchemyst-devops-oci:amdImageId: ocid1.image.oc1..replace-me
   # alchemyst-devops-oci:armImageId: ocid1.image.oc1..replace-me
+  # Optional deployment ref; CI normally supplies DEPLOY_REF as the exact commit SHA.
+  # alchemyst-devops-oci:deployRef: main

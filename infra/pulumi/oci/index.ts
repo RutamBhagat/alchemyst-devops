@@ -6,6 +6,7 @@ const config = new pulumi.Config();
 const compartmentId = config.require("compartmentId");
 const availabilityDomain = config.require("availabilityDomain");
 const repositoryUrl = config.require("repositoryUrl");
+const deployRef = process.env.DEPLOY_REF ?? config.get("deployRef") ?? "main";
 const sshAuthorizedKey = config.get("sshAuthorizedKey");
 const sshAllowedCidr = config.get("sshAllowedCidr");
 
@@ -182,7 +183,7 @@ function createInstance(args: {
   role: DeploymentRole;
 }, opts?: pulumi.CustomResourceOptions): oci.core.Instance {
   const metadata: Record<string, pulumi.Input<string>> = {
-    user_data: Buffer.from(dockerCloudInit(args.role, repositoryUrl)).toString("base64"),
+    user_data: Buffer.from(dockerCloudInit(args.role, repositoryUrl, deployRef)).toString("base64"),
   };
   if (sshAuthorizedKey) metadata.ssh_authorized_keys = sshAuthorizedKey;
 
@@ -203,7 +204,7 @@ function createInstance(args: {
     metadata,
     preserveBootVolume: false,
     freeformTags: tags,
-  }, opts);
+  }, { ...opts, deleteBeforeReplace: true, replaceOnChanges: ["metadata"] });
 }
 
 const gateway = createInstance({
@@ -245,6 +246,7 @@ const inference = createInstance({
   role: "inference",
 }, { dependsOn: [gateway] });
 
+export const deployedRef = deployRef;
 export const apiIp = gateway.publicIp;
 export const apiUrl = pulumi.interpolate`http://${gateway.publicIp}/v1/chat/completions`;
 export const gatewayPrivateIp = gateway.privateIp;

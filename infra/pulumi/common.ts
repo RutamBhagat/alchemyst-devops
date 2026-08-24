@@ -6,11 +6,12 @@ const composeFiles: Record<DeploymentRole, string> = {
   inference: "inference.compose.yaml",
 };
 
-export function dockerCloudInit(role: DeploymentRole, repositoryUrl: string): string {
+export function dockerCloudInit(role: DeploymentRole, repositoryUrl: string, deployRef: string): string {
   const repoDir = "/opt/devops-assignment";
   const composeFile = `${repoDir}/deploy/docker/${composeFiles[role]}`;
   const commands = [
-    ["git", "clone", "--depth", "1", "--branch", "main", repositoryUrl, repoDir],
+    ["git", "clone", repositoryUrl, repoDir],
+    ["git", "-C", repoDir, "checkout", "--detach", deployRef],
     ["docker", "compose", "-f", composeFile, "up", "-d", "--build"],
   ];
 

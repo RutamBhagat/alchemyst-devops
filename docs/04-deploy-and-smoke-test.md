@@ -37,6 +37,7 @@ pulumi config set oci:region ap-mumbai-1
 pulumi config set compartmentId '<compartment-ocid>'
 pulumi config set availabilityDomain '<availability-domain>'
 pulumi config set repositoryUrl 'https://github.com/RutamBhagat/alchemyst-devops.git'
+pulumi config set deployRef main  # optional locally; CI uses DEPLOY_REF=<commit SHA>
 ```
 
 The defaults use `VM.Standard.E2.1.Micro` for gateway/caller and `VM.Standard.A1.Flex` at 1 OCPU / 6 GB for inference. Pulumi discovers the newest compatible Ubuntu 24.04 Minimal images. Optional explicit pins:
@@ -55,7 +56,7 @@ pulumi preview
 pulumi up
 ```
 
-Cloud-init installs Ubuntu's Docker Engine/Compose packages, clones the repository, builds the role image(s) locally on each VM, and starts them. No application registry or `docker pull` of application images is involved.
+Cloud-init installs Ubuntu's Docker Engine/Compose packages, clones the repository, checks out the configured `deployRef`/`DEPLOY_REF`, builds the role image(s) locally on each VM, and starts them. No application registry or `docker pull` of application images is involved. Changing the deployment ref replaces the fixed-IP VMs so cloud-init runs for the new revision.
 
 Smoke test:
 
