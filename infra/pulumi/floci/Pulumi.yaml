@@ -1,0 +1,3 @@
+name: alchemyst-devops-floci
+runtime: nodejs
+description: Local AWS-compatible Pulumi deployment backed by Floci

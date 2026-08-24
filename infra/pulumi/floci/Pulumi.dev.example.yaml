@@ -1,0 +1,4 @@
+config:
+  alchemyst-devops-floci:endpoint: http://localhost:4566
+  alchemyst-devops-floci:region: us-east-1
+  # alchemyst-devops-floci:gatewayHost: host.docker.internal

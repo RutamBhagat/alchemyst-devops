@@ -1,0 +1,16 @@
+services:
+  floci:
+    image: floci/floci:latest
+    container_name: alchemyst-floci
+    user: root
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      FLOCI_DOCKER_RESOURCE_NAMESPACE: alchemyst-devops
+      FLOCI_HOSTNAME: floci
+      FLOCI_BASE_URL: http://floci:4566
+      FLOCI_SERVICES_DOCKER_NETWORK: floci_default
+      FLOCI_SERVICES_ECS_DOCKER_NETWORK: floci_default
+    restart: unless-stopped

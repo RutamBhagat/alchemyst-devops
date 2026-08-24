@@ -1,32 +1,32 @@
 # Distributed Inference with Pulumi
 
-This repository deploys the Alchemyst DevOps internship assignment as a three-node iii inference mesh. Infrastructure is now defined in Pulumi with two targets:
+This repository deploys the Alchemyst DevOps internship assignment as a three-role iii inference mesh with Pulumi and Docker:
 
-- **OCI** — the real cloud deployment. The API gateway is public; caller and inference workers run without public IPs in a private subnet and use a NAT gateway for outbound package/model downloads.
-- **Floci** — a local AWS-compatible deployment for repeatable development and CI. Floci's EC2 implementation launches real Docker-backed instances and the Pulumi AWS provider is pointed at `http://localhost:4566`.
+- **OCI** — the real cloud deployment. Pulumi creates a public gateway VM plus private caller/inference VMs. Each VM boots Ubuntu 24.04 Minimal and runs its role with Docker Compose.
+- **Floci** — the local AWS-compatible target. Pulumi creates ECS resources against Floci, and Floci runs the same locally built application images as real Docker containers.
 
-The application topology is unchanged: nginx -> iii HTTP trigger -> TypeScript caller -> Python inference worker.
+The application flow is unchanged: nginx -> iii HTTP trigger -> TypeScript caller -> Python inference worker.
 
 ## Architecture
 
 ```text
-Internet / localhost
-        |
-        | HTTP :80
-        v
-+-------------------------+
-| API gateway             |
-| 10.10.0.10              |
-| nginx -> iii            |
-+------------+------------+
-             | private RPC :49134
-             v
-+-------------------------+       +-------------------------+
-| caller worker           | ----> | inference worker        |
-| 10.10.1.11              | RPC   | 10.10.1.12              |
-| no public IP            |       | no public IP            |
-+-------------------------+       +-------------------------+
+Internet
+   |
+   | HTTP :80
+   v
++-----------------------------+
+| OCI gateway 10.10.0.10      |
+| Docker: nginx + iii engine  |
++--------------+--------------+
+               | private RPC :49134
+               v
++-----------------------------+       +-----------------------------+
+| caller 10.10.1.11           | ----> | inference 10.10.1.12        |
+| Docker, no public IP        | RPC   | Docker, no public IP        |
++-----------------------------+       +-----------------------------+
 ```
+
+Floci uses the same four application images through its Docker-backed ECS emulator. The local API is published at `http://localhost:8080`.
 
 ## API
 
@@ -36,11 +36,7 @@ Content-Type: application/json
 ```
 
 ```json
-{
-  "messages": [
-    {"role": "user", "content": "Say hello in one sentence."}
-  ]
-}
+{"messages":[{"role":"user","content":"Say hello in one sentence."}]}
 ```
 
 Expected response shape:
@@ -49,7 +45,7 @@ Expected response shape:
 {"text":"..."}
 ```
 
-For OCI:
+OCI:
 
 ```bash
 API_IP="$(cd infra/pulumi/oci && pulumi stack output apiIp)"
@@ -58,31 +54,34 @@ curl -fsS -m 90 -X POST "http://${API_IP}/v1/chat/completions" \
   -d '{"messages":[{"role":"user","content":"Say hello in one sentence."}]}'
 ```
 
-For Floci, EC2 security-group publishing maps guest port `80` to a host port in Floci's configured range. The deploy guide shows how to read that port from the Floci logs and issue the same request against localhost.
+Floci:
+
+```bash
+curl -fsS -m 90 -X POST http://localhost:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Say hello in one sentence."}]}'
+```
 
 ## Repository Layout
 
 ```text
 infra/pulumi/
-  package.json
-  common.ts                    # provider-neutral user-data assembly
-  oci/                         # real OCI VCN/subnets/NAT/NSGs/instances
-  floci/                       # AWS Pulumi program + Floci Docker Compose
-
+  common.ts                    # minimal OCI cloud-init generation
+  oci/                         # OCI VCN/subnets/NAT/NSGs/VMs
+  floci/                       # Floci ECS Pulumi program + emulator Compose
 deploy/
+  docker/                      # Dockerfiles and per-role Compose files
   gateway/                     # iii and nginx configuration
-  scripts/                     # provider-neutral VM bootstrap scripts
-  systemd/                     # runtime services
 quickstart/
-  workers/caller-worker/       # TypeScript RPC/HTTP worker
-  workers/inference-worker/    # Python GGUF inference worker
+  workers/caller-worker/       # TypeScript caller
+  workers/inference-worker/    # Python GGUF inference
 ```
 
-Terraform has been removed. Both targets use the same bootstrap and service files, with `REPOSITORY_URL` and `III_URL` injected by Pulumi user data.
+Terraform and the application-level systemd units/bootstrap scripts have been removed. OCI user data only installs Git + Docker/Compose, clones the repository, and starts the role Compose file. Floci does not boot nested VMs; its ECS emulator launches the locally built Docker images directly.
 
 ## Deploy
 
-See [Deploy and smoke test](docs/04-deploy-and-smoke-test.md) for OCI and Floci instructions, and [Teardown](docs/05-teardown.md) for cleanup.
+See [Deploy and smoke test](docs/04-deploy-and-smoke-test.md) and [Teardown](docs/05-teardown.md).
 
 Minimal local validation:
 
@@ -90,27 +89,39 @@ Minimal local validation:
 npm --prefix infra/pulumi install
 npm --prefix infra/pulumi run typecheck
 
-cd quickstart/workers/caller-worker
-npm ci
-npm run build
+docker compose -f deploy/docker/build.compose.yaml config -q
 
-python3 -m py_compile ../inference-worker/inference_worker.py
+npm --prefix quickstart/workers/caller-worker ci
+npm --prefix quickstart/workers/caller-worker run build
+python3 -m py_compile quickstart/workers/inference-worker/inference_worker.py
 ```
+
+## OCI Compute and Images
+
+The default OCI allocation is:
+
+- gateway: `VM.Standard.E2.1.Micro` (AMD/x86_64, 1 GB)
+- caller: `VM.Standard.E2.1.Micro` (AMD/x86_64, 1 GB)
+- inference: `VM.Standard.A1.Flex` (Arm64, 1 OCPU / 6 GB)
+
+Pulumi selects the newest compatible **Canonical Ubuntu 24.04 Minimal** platform image. AMD uses the `Canonical-Ubuntu-24.04-Minimal-*` family and A1 uses `Canonical-Ubuntu-24.04-Minimal-aarch64-*`. Explicit image OCIDs can override discovery.
+
+## Container Images and Registries
+
+Application images are built locally from this repository; there is no application-image registry dependency and no `docker push` step. OCI builds on each VM during cloud-init, while the Floci workflow builds once on the development machine before `pulumi up`.
+
+The Dockerfiles still pull public base images (`ubuntu`, `nginx`, `node`, `python`) and Python/npm dependencies. Eliminating all registry/package-network access would require pre-baked OCI VM images or exported `docker save` artifacts.
 
 ## Network Invariants
 
-- Only the API gateway receives a public endpoint.
-- Caller and inference workers have no public IPs.
-- Worker RPC to gateway port `49134` is allowed only from the worker security group/NSG.
-- Public ingress is limited to gateway HTTP port `80`; SSH is disabled by default on OCI unless `sshAllowedCidr` is configured.
-- OCI private workers use a NAT gateway for outbound dependencies without becoming publicly addressable.
-
-## Portability Note
-
-OCI defaults to the Always Free compute mix: gateway and caller use AMD `VM.Standard.E2.1.Micro`; inference uses Ampere `VM.Standard.A1.Flex` at 1 OCPU / 6 GB. The A1 worker uses an ARM-compatible Ubuntu image and resolves the pinned direct Python dependencies from `requirements.in` instead of forcing the committed x86_64 lock file. Floci on Apple Silicon follows the same ARM dependency path.
+- Only the OCI gateway receives a public IP.
+- Caller and inference OCI VMs remain private.
+- RPC/49134 is allowed to the gateway only from the worker NSG.
+- Public ingress is limited to gateway HTTP/80 unless gateway SSH is explicitly enabled.
+- Private workers use an OCI NAT Gateway for outbound image/package/model downloads.
 
 ## Production Hardening
 
-Before production: TLS, authentication/rate limiting, managed observability, immutable images, secret management, least-privilege instance identities, request limits/timeouts, and a production model-serving layer rather than bootstrap-time dependency/model downloads.
+Before production: TLS, authentication/rate limiting, managed observability, immutable prebuilt images, secret management, least-privilege instance identities, request limits/timeouts, and a production model-serving tier instead of first-start model downloads.
 
-If the model were 100x larger, inference would move to a GPU-backed serving tier (for example vLLM/TGI) with pre-staged weights, independent autoscaling, queueing/backpressure, and streaming. The public/private network boundary would remain the same.
+If the model were 100x larger, inference would move to GPU-backed serving such as vLLM/TGI with pre-staged weights, independent autoscaling, queueing/backpressure, and streaming. The public/private network boundary remains the same.

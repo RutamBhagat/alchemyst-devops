@@ -1,0 +1,21 @@
+services:
+  iii-engine:
+    image: alchemyst/iii-engine:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/gateway-engine.Dockerfile
+  gateway-proxy:
+    image: alchemyst/gateway-proxy:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/gateway-proxy.Dockerfile
+  caller:
+    image: alchemyst/caller:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/caller.Dockerfile
+  inference:
+    image: alchemyst/inference:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/inference.Dockerfile

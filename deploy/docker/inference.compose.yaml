@@ -1,0 +1,15 @@
+services:
+  inference:
+    image: alchemyst/inference:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/inference.Dockerfile
+    environment:
+      III_URL: ws://10.10.0.10:49134
+      HF_HOME: /models/huggingface
+    volumes:
+      - hf-cache:/models/huggingface
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

@@ -1,0 +1,3 @@
+name: alchemyst-devops-oci
+runtime: nodejs
+description: OCI deployment for the Alchemyst distributed inference assignment

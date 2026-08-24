@@ -1,0 +1,20 @@
+services:
+  iii-engine:
+    image: alchemyst/iii-engine:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/gateway-engine.Dockerfile
+    ports:
+      - "49134:49134"
+    restart: unless-stopped
+
+  gateway-proxy:
+    image: alchemyst/gateway-proxy:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/gateway-proxy.Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - iii-engine
+    restart: unless-stopped

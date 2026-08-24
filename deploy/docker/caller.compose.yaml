@@ -1,0 +1,9 @@
+services:
+  caller:
+    image: alchemyst/caller:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/caller.Dockerfile
+    environment:
+      III_URL: ws://10.10.0.10:49134
+    restart: unless-stopped

@@ -1,0 +1,8 @@
+config:
+  oci:region: ap-mumbai-1
+  alchemyst-devops-oci:compartmentId: ocid1.compartment.oc1..replace-me
+  alchemyst-devops-oci:availabilityDomain: replace-me
+  alchemyst-devops-oci:repositoryUrl: https://github.com/RutamBhagat/alchemyst-devops.git
+  # Optional image overrides; otherwise Pulumi selects current Ubuntu 24.04 images by shape.
+  # alchemyst-devops-oci:amdImageId: ocid1.image.oc1..replace-me
+  # alchemyst-devops-oci:armImageId: ocid1.image.oc1..replace-me

@@ -1,0 +1,8 @@
+node_modules/
+.pulumi/
+oci/Pulumi.*.yaml
+floci/Pulumi.*.yaml
+!oci/Pulumi.yaml
+!floci/Pulumi.yaml
+!oci/Pulumi.dev.example.yaml
+!floci/Pulumi.dev.example.yaml

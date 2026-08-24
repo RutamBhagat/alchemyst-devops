@@ -1,150 +1,53 @@
 # Teardown
 
-Use this guide immediately after the smoke test, or sooner if deployment fails.
-The stack is Terraform-managed, so the first cleanup path is `terraform destroy`.
+## OCI
 
-> [!CAUTION]
-> These commands delete cloud resources. Check `PROJECT_ID` before running them.
-
-## Required Variables
-
-Run from the repository root with the same variables used during deployment:
+From the configured OCI Pulumi project:
 
 ```bash
-export PROJECT_ID="alchemyst-test-REPLACE-ME"
-export REPO_URL="https://github.com/RutamBhagat/alchemyst-devops.git"
-export REGION="us-central1"
-export ZONE="us-central1-a"
-
-gcloud config set project "$PROJECT_ID"
+cd infra/pulumi/oci
+pulumi destroy
 ```
 
-## Destroy Terraform Resources
+Destroying the compute instances also removes their locally built Docker images/containers and the inference cache stored on their boot volumes.
+
+Then verify the stack has no managed resources:
 
 ```bash
-terraform -chdir=infra/terraform destroy -auto-approve \
-  -var="project_id=$PROJECT_ID" \
-  -var="repository_url=$REPO_URL"
+pulumi stack --show-urns
 ```
 
-This is the primary cleanup path because Terraform created the VPC, subnet,
-Cloud NAT, firewall rules, public IP address, and VMs.
+If destroy fails, inspect OCI resources tagged `project=alchemyst-devops`. Delete compute instances before network dependencies, then subnets/NSGs/route tables/gateways, then the VCN.
 
-## Verify Resources Are Gone
+Pulumi does not manage the OCI compartment or tenancy billing configuration.
 
-Each command should return no matching resources:
+## Floci
+
+Destroy the emulated ECS resources first:
 
 ```bash
-gcloud compute instances list --filter='name~alchemyst-devops'
-gcloud compute disks list --filter='name~alchemyst-devops'
-gcloud compute addresses list --filter='name~alchemyst-devops'
-gcloud compute routers list --filter='name~alchemyst-devops'
-gcloud compute firewall-rules list --filter='name~alchemyst-devops'
-gcloud compute networks list --filter='name=alchemyst-devops-vpc'
+cd infra/pulumi/floci
+pulumi destroy
 ```
 
-If all commands are empty, skip to [Stop Billing](#stop-billing).
-
-## Manual Cleanup
-
-Use this section only if Terraform destroy fails or leaves named resources
-behind. Delete dependents before deleting the network.
-
-Delete VMs:
+Then stop/remove Floci:
 
 ```bash
-gcloud compute instances delete \
-  alchemyst-devops-api-gateway \
-  alchemyst-devops-caller-worker \
-  alchemyst-devops-inference-worker \
-  --zone "$ZONE" --quiet
+docker compose down --remove-orphans
 ```
 
-Delete the reserved public IP:
+Inspect any surviving Floci-created Docker containers before manual cleanup:
 
 ```bash
-gcloud compute addresses delete alchemyst-devops-api-ip \
-  --region "$REGION" --quiet
+docker ps -a --format 'table {{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Labels}}'
 ```
 
-Delete Cloud NAT and the router:
+Locally built application images are intentionally outside Pulumi state. Remove them only if desired:
 
 ```bash
-gcloud compute routers nats delete alchemyst-devops-nat \
-  --router alchemyst-devops-router \
-  --region "$REGION" --quiet
-
-gcloud compute routers delete alchemyst-devops-router \
-  --region "$REGION" --quiet
+docker image rm \
+  alchemyst/iii-engine:local \
+  alchemyst/gateway-proxy:local \
+  alchemyst/caller:local \
+  alchemyst/inference:local
 ```
-
-Delete firewall rules:
-
-```bash
-gcloud compute firewall-rules delete \
-  alchemyst-devops-allow-api-http \
-  alchemyst-devops-allow-iap-ssh \
-  alchemyst-devops-allow-worker-rpc \
-  --quiet
-```
-
-Delete the subnet and VPC:
-
-```bash
-gcloud compute networks subnets delete alchemyst-devops-private \
-  --region "$REGION" --quiet
-
-gcloud compute networks delete alchemyst-devops-vpc --quiet
-```
-
-Run the verification commands again after manual cleanup.
-
-## Stop Billing
-
-After Terraform cleanup succeeds, unlink billing from the throwaway project:
-
-```bash
-gcloud billing projects unlink "$PROJECT_ID"
-```
-
-Unlinking billing disables billing for the project and stops billable
-resources/services from continuing to run. Already-accrued charges can still
-post later.
-
-## Delete The Project
-
-Delete the throwaway project after billing is unlinked:
-
-```bash
-gcloud projects delete "$PROJECT_ID" --quiet
-```
-
-Project deletion stops billing and resource usage, then keeps the project in a
-recovery window before permanent deletion.
-
-Dashboard equivalent:
-
-1. Open Billing.
-2. Go to My projects.
-3. Select the project row and disable billing.
-4. Open IAM & Admin.
-5. Go to Manage resources.
-6. Select the project.
-7. Delete it and enter the project ID when prompted.
-
-## Emergency Stop
-
-If cleanup is blocked and costs must stop immediately, unlink billing first:
-
-```bash
-gcloud billing projects unlink "$PROJECT_ID"
-```
-
-Then delete the project:
-
-```bash
-gcloud projects delete "$PROJECT_ID" --quiet
-```
-
-This is a hard stop for the throwaway project. Use `terraform destroy` first
-when it is available, because it records a clean Terraform-managed teardown.
