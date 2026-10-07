@@ -2,7 +2,8 @@
   "name": "alchemyst-devops-infra",
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit false --outDir ../../.temp/pulumi-tests && NODE_PATH=$PWD/node_modules node --test ../../.temp/pulumi-tests/oci/index.test.js"
   },
   "dependencies": {
     "@pulumi/aws": "7.43.0",

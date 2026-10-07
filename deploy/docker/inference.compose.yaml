@@ -5,10 +5,12 @@ services:
       context: ../..
       dockerfile: deploy/docker/inference.Dockerfile
     environment:
-      III_URL: ws://10.10.0.10:49134
-      HF_HOME: /models/huggingface
+      III_URL: ${III_URL:-ws://10.10.1.11:49134}
+      MODEL_DIR: /models/huggingface
     volumes:
       - hf-cache:/models/huggingface
+    mem_limit: 768m
+    memswap_limit: 768m
     restart: unless-stopped
 
 volumes:

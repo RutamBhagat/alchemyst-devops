@@ -1,6 +1,8 @@
 import { Logger, registerWorker } from 'iii-sdk';
 import { z } from 'zod';
 
+const inferenceTimeoutMs = 180_000;
+
 const iii = registerWorker(process.env.III_URL ?? 'ws://localhost:49134');
 const logger = new Logger();
 
@@ -27,6 +29,7 @@ iii.registerFunction(
     const result = await iii.trigger({
       function_id: 'inference::run_inference',
       payload,
+      timeoutMs: inferenceTimeoutMs,
     });
 
     const response = inferenceResponseSchema.safeParse(result);
@@ -59,6 +62,7 @@ iii.registerFunction(
     const result = await iii.trigger({
       function_id: 'inference::get_response',
       payload: request.data,
+      timeoutMs: inferenceTimeoutMs + 10_000,
     });
 
     const response = inferenceResponseSchema.safeParse(result);
@@ -80,6 +84,29 @@ iii.registerTrigger({
   type: 'http',
   function_id: 'http::run_inference_over_http',
   config: { api_path: '/v1/chat/completions', http_method: 'POST' },
+});
+
+// OCI HTTP health checks exercise caller -> engine -> loaded inference worker.
+iii.registerFunction('http::health', async () => {
+  try {
+    const result = await iii.trigger<{}, { ready: boolean }>({
+      function_id: 'inference::health', payload: {}, timeoutMs: 2000,
+    });
+    return {
+      status_code: result.ready === true ? 200 : 503,
+      body: { ready: result.ready === true },
+      headers: { 'Content-Type': 'application/json' },
+    };
+  } catch {
+    return {
+      status_code: 503, body: { ready: false },
+      headers: { 'Content-Type': 'application/json' },
+    };
+  }
+});
+iii.registerTrigger({
+  type: 'http', function_id: 'http::health',
+  config: { api_path: '/health', http_method: 'GET' },
 });
 
 logger.info('Caller worker started - listening for calls');

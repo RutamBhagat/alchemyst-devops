@@ -26,14 +26,16 @@ jobs:
           python-version: '3.12'
       - name: Install Pulumi dependencies
         run: npm --prefix infra/pulumi ci
-      - name: Typecheck Pulumi
-        run: npm --prefix infra/pulumi run typecheck
+      - name: Typecheck and test Pulumi
+        run: |
+          npm --prefix infra/pulumi run typecheck
+          npm --prefix infra/pulumi test
       - name: Build caller worker
         run: |
           npm --prefix quickstart/workers/caller-worker ci
           npm --prefix quickstart/workers/caller-worker run build
       - name: Check Python worker
-        run: python -m py_compile quickstart/workers/inference-worker/inference_worker.py
+        run: python -m compileall -q quickstart/workers/inference-worker
       - name: Validate Compose
         run: |
           for file in deploy/docker/*.compose.yaml; do
@@ -43,12 +45,24 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - name: Build CI images
         run: docker compose -f deploy/docker/build.compose.yaml build
-      - name: Verify production Arm inference build
+      - name: Test quantized inference runtime
+        run: docker run --rm --memory 768m --memory-swap 768m alchemyst/inference:local python -m unittest -v test_runtime
+      - name: Verify E2 memory-limited mesh
         run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            --file deploy/docker/inference.Dockerfile \
-            --output type=cacheonly .
+          set -euo pipefail
+          trap 'docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml logs --tail=100; docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml down' EXIT
+          docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml up -d --no-build
+          python3 deploy/smoke-test.py
+          sleep 2
+          docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml logs iii-engine | grep -F 'inference::run_inference generated'
+          docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml logs iii-engine | grep -F 'Running http inference'
+          docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml restart iii-engine
+          READY_TIMEOUT=90 python3 deploy/smoke-test.py --readiness-only
+          for id in $(docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml ps -aq); do
+            test "$(docker inspect -f '{{.State.Running}} {{.State.OOMKilled}} {{.RestartCount}}' "$id")" = 'true false 0'
+          done
+          docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml stop inference
+          python3 -c 'import runpy; t=runpy.run_path("deploy/smoke-test.py"); assert t["request"](t["HEALTH_URL"]) == (503, {"ready": False})'
       - name: Scan iii engine
         uses: aquasecurity/trivy-action@0.36.0
         with:

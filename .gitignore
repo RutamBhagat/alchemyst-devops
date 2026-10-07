@@ -1,0 +1,3 @@
+# Local experiments, compiled infrastructure tests, and validation state.
+.temp/
+__pycache__/

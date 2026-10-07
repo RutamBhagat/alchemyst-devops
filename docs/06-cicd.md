@@ -6,12 +6,13 @@ The production pipeline deliberately does not use OCIR, Docker Hub, GHCR, or ano
 
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main`:
 
-- Pulumi TypeScript typecheck
+- Pulumi TypeScript typecheck and mocked two-micro/load-balancer regression
 - caller TypeScript install/build
 - Python syntax check
 - Docker Compose validation
 - real local builds of all four images
-- an additional `linux/arm64` inference build, matching OCI A1
+- Python prompt/cache/serialized-generation regressions
+- real inference and HTTP contract smoke tests with E2 container memory limits and a 0.25-vCPU inference quota
 - Trivy HIGH/CRITICAL vulnerability reports
 - CycloneDX SBOM artifacts for each application image
 - optional OCI `pulumi preview` on same-repository pull requests
@@ -38,8 +39,8 @@ The deployment:
 
 1. reads the previous `deployedRef` stack output,
 2. runs `pulumi up` with the successful CI commit as `DEPLOY_REF`,
-3. waits for a real `/v1/chat/completions` request to succeed,
-4. verifies invalid input returns HTTP 400,
+3. waits for `/health` to verify the loaded inference worker (up to an hour for initial micro builds),
+4. runs the shared smoke test: real inference, invalid input HTTP 400, the 1 MiB body limit, and the existing empty-messages failure contract,
 5. verifies public TCP/49134 is closed,
 6. attempts the previous `deployedRef` automatically if smoke verification fails.
 

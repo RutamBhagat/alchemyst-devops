@@ -57,6 +57,9 @@ jobs:
           pulumi-version: 3.259.0
           stack-name: ${{ vars.PULUMI_STACK || 'dev' }}
           work-dir: infra/pulumi/oci
+          # CI uses API-key secrets, not a developer's browser session token.
+          config-map: |
+            oci:auth: {value: ApiKey, secret: false}
           refresh: true
           diff: true
       - name: Smoke test deployment
@@ -66,29 +69,14 @@ jobs:
           API_URL: ${{ steps.deploy.outputs.apiUrl }}
         run: |
           set -euo pipefail
-          ok=0
-          for attempt in $(seq 1 24); do
-            status="$(curl -sS -o /tmp/inference.json -w '%{http_code}' -m 30 \
-              -X POST "$API_URL" \
-              -H 'Content-Type: application/json' \
-              -d '{"messages":[{"role":"user","content":"Reply with one short sentence."}]}' || true)"
-            if [ "$status" = 200 ] && python3 -c 'import json; d=json.load(open("/tmp/inference.json")); assert isinstance(d.get("text"), str) and d["text"].strip()'; then
-              ok=1
-              break
-            fi
-            sleep 15
-          done
-          test "$ok" = 1
-
-          bad_status="$(curl -sS -o /tmp/invalid.json -w '%{http_code}' -m 30 \
-            -X POST "$API_URL" -H 'Content-Type: application/json' -d '{"bad":true}' || true)"
-          test "$bad_status" = 400
+          # Native builds and model download on a micro can take many minutes.
+          READY_TIMEOUT=3600 python3 deploy/smoke-test.py
 
           host="${API_URL#http://}"
           host="${host%%/*}"
           host="${host%%:*}"
           if timeout 5 bash -c "</dev/tcp/$host/49134" 2>/dev/null; then
-            echo 'gateway RPC port 49134 is unexpectedly public' >&2
+            echo 'load balancer unexpectedly exposes RPC port 49134' >&2
             exit 1
           fi
       - name: Roll back failed smoke test
@@ -101,6 +89,8 @@ jobs:
           pulumi-version: 3.259.0
           stack-name: ${{ vars.PULUMI_STACK || 'dev' }}
           work-dir: infra/pulumi/oci
+          config-map: |
+            oci:auth: {value: ApiKey, secret: false}
           refresh: true
           diff: true
       - name: Fail after unsuccessful verification

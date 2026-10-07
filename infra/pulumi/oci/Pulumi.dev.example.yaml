@@ -1,10 +1,14 @@
 config:
-  oci:region: ap-mumbai-1
+  # Always Free resources must be deployed in your tenancy's home region.
+  oci:region: eu-frankfurt-1
+  # For local browser sessions only; CI explicitly selects ApiKey authentication.
+  # oci:auth: SecurityToken
+  # oci:configFileProfile: DEFAULT
   alchemyst-devops-oci:compartmentId: ocid1.compartment.oc1..replace-me
-  alchemyst-devops-oci:availabilityDomain: replace-me
+  # Select an AD with two available micro slots (Frankfurt AD-3 in this tenancy).
+  alchemyst-devops-oci:availabilityDomain: replace-me-with-AD-having-micro-quota
   alchemyst-devops-oci:repositoryUrl: https://github.com/RutamBhagat/alchemyst-devops.git
-  # Optional image overrides; otherwise Pulumi selects current Ubuntu 24.04 images by shape.
+  # Optional image override; otherwise Pulumi selects Ubuntu 24.04 Minimal x86.
   # alchemyst-devops-oci:amdImageId: ocid1.image.oc1..replace-me
-  # alchemyst-devops-oci:armImageId: ocid1.image.oc1..replace-me
   # Optional deployment ref; CI normally supplies DEPLOY_REF as the exact commit SHA.
   # alchemyst-devops-oci:deployRef: main

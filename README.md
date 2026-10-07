@@ -1,11 +1,11 @@
 # Distributed Inference with Pulumi
 
-This repository deploys the Alchemyst DevOps internship assignment as a three-role iii inference mesh with Pulumi and Docker:
+This repository deploys the Alchemyst DevOps internship assignment as a distributed iii inference mesh with Pulumi and Docker:
 
-- **OCI** — the real cloud deployment. Pulumi creates a public gateway VM plus private caller/inference VMs. Each VM boots Ubuntu 24.04 Minimal and runs its role with Docker Compose.
+- **OCI** — two private E2 micro VMs behind Oracle's free 10 Mbps flexible load balancer. Each VM boots Ubuntu 24.04 Minimal and runs Docker Compose.
 - **Floci** — the local AWS-compatible target. Pulumi creates ECS resources against Floci, and Floci runs the same locally built application images as real Docker containers.
 
-The application flow is unchanged: nginx -> iii HTTP trigger -> TypeScript caller -> Python inference worker.
+OCI: Oracle load balancer -> private nginx adapter -> iii HTTP trigger -> TypeScript caller -> Python inference worker. The nginx sidecar preserves the 1 MiB request-body limit; no public gateway VM is needed. Floci retains its local nginx ingress.
 
 ## Architecture
 
@@ -15,14 +15,15 @@ Internet
    | HTTP :80
    v
 +-----------------------------+
-| OCI gateway 10.10.0.10      |
-| Docker: nginx + iii engine  |
+| Oracle flexible LB, 10 Mbps |
+| Public IP, HTTP health check |
 +--------------+--------------+
-               | private RPC :49134
+               | private HTTP :80
                v
 +-----------------------------+       +-----------------------------+
-| caller 10.10.1.11           | ----> | inference 10.10.1.12        |
-| Docker, no public IP        | RPC   | Docker, no public IP        |
+| API E2 micro 10.10.1.11     | <---- | inference E2 10.10.1.12     |
+| nginx + iii engine + caller | RPC   | llama.cpp / Gemma 270M Q8   |
+| No public IP                |:49134 | No public IP                |
 +-----------------------------+       +-----------------------------+
 ```
 
@@ -67,7 +68,7 @@ curl -fsS -m 90 -X POST http://localhost:8080/v1/chat/completions \
 ```text
 infra/pulumi/
   common.ts                    # minimal OCI cloud-init generation
-  oci/                         # OCI VCN/subnets/NAT/NSGs/VMs
+  oci/                         # OCI VCN/subnets/NAT/NSGs/VMs/load balancer
   floci/                       # Floci ECS Pulumi program + emulator Compose
 deploy/
   docker/                      # Dockerfiles and per-role Compose files
@@ -88,6 +89,7 @@ Minimal local validation:
 ```bash
 npm --prefix infra/pulumi install
 npm --prefix infra/pulumi run typecheck
+npm --prefix infra/pulumi test
 
 docker compose -f deploy/docker/build.compose.yaml config -q
 
@@ -98,13 +100,17 @@ python3 -m py_compile quickstart/workers/inference-worker/inference_worker.py
 
 ## OCI Compute and Images
 
-The default OCI allocation is:
+OCI uses exactly two `VM.Standard.E2.1.Micro` VMs (AMD/x86_64, 1 GB each): iii engine + caller on one, inference on the other. Oracle's flexible load balancer is fixed at 10 Mbps minimum **and** maximum. Deploy in your tenancy's home region with these free allowances available; each boot volume is 50 GB.
 
-- gateway: `VM.Standard.E2.1.Micro` (AMD/x86_64, 1 GB)
-- caller: `VM.Standard.E2.1.Micro` (AMD/x86_64, 1 GB)
-- inference: `VM.Standard.A1.Flex` (Arm64, 1 OCPU / 6 GB)
+Pulumi selects the newest compatible **Canonical Ubuntu 24.04 Minimal** x86 platform image. `amdImageId` can override discovery. See [OCI plan](docs/01-oci-plan.md) for the free-tier budget and model-runtime constraints.
 
-Pulumi selects the newest compatible **Canonical Ubuntu 24.04 Minimal** platform image. AMD uses the `Canonical-Ubuntu-24.04-Minimal-*` family and A1 uses `Canonical-Ubuntu-24.04-Minimal-aarch64-*`. Explicit image OCIDs can override discovery.
+The inference worker keeps Gemma 3 270M Q8 quantized via llama.cpp, with a 2048-token context and 256-token output cap. Its container is limited to 768 MiB, leaving RAM for the host. Requests can take minutes on the micro's shared CPU; timeouts are sized accordingly. Test the real mesh locally (AMD64, production memory limits, 0.25-vCPU inference quota):
+
+```bash
+docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml up -d --build
+python3 deploy/smoke-test.py
+docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml down
+```
 
 ## Container Images and Registries
 
@@ -114,10 +120,10 @@ The Dockerfiles still pull public base images (`ubuntu`, `nginx`, `node`, `pytho
 
 ## Network Invariants
 
-- Only the OCI gateway receives a public IP.
-- Caller and inference OCI VMs remain private.
-- RPC/49134 is allowed to the gateway only from the worker NSG.
-- Public ingress is limited to gateway HTTP/80 unless gateway SSH is explicitly enabled.
+- Only the OCI load balancer receives a public IP; both VMs remain private.
+- Backend HTTP/80 is allowed only from the load-balancer NSG; iii HTTP/3111 stays inside the Docker network.
+- RPC/49134 is allowed to the API VM only from the inference NSG.
+- Public ingress is limited to load-balancer HTTP/80. SSH requires a private administrative path.
 - Private workers use an OCI NAT Gateway for outbound image/package/model downloads.
 
 ## Production Hardening

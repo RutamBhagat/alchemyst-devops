@@ -1,0 +1,35 @@
+# OCI: one private E2 micro; Oracle LB is public, nginx enforces ingress policy.
+services:
+  iii-engine:
+    image: alchemyst/iii-engine:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/gateway-engine.Dockerfile
+    ports:
+      - "49134:49134"
+    mem_limit: 192m
+    restart: unless-stopped
+
+  gateway-proxy:
+    image: alchemyst/gateway-proxy:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/gateway-proxy.Dockerfile
+    ports:
+      - "80:80"
+    mem_limit: 32m
+    depends_on:
+      - iii-engine
+    restart: unless-stopped
+
+  caller:
+    image: alchemyst/caller:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/caller.Dockerfile
+    environment:
+      III_URL: ws://iii-engine:49134
+    mem_limit: 128m
+    depends_on:
+      - iii-engine
+    restart: unless-stopped

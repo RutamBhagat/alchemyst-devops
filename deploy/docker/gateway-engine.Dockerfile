@@ -6,7 +6,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl jq \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL https://install.iii.dev/iii/main/install.sh -o /tmp/install-iii.sh \
-    && VERSION=0.11.0 BIN_DIR=/usr/local/bin sh /tmp/install-iii.sh \
+    && VERSION=0.20.0 BIN_DIR=/usr/local/bin sh /tmp/install-iii.sh \
     && rm /tmp/install-iii.sh
 
 COPY deploy/gateway/iii-config.yaml /etc/iii/iii-config.yaml

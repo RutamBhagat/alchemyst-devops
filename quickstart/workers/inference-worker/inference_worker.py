@@ -1,87 +1,29 @@
 import os
-from typing import Any, Dict, List
+import threading
+from typing import Any
 
-from iii import InitOptions, Logger, register_worker
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from iii import InitOptions, register_worker
+from iii_helpers.observability import Logger
+from model_runtime import InferenceRuntime
 
+# Register only after the model is ready; /health must not report a loading worker.
+runtime = InferenceRuntime()
 iii = register_worker(
     os.environ.get("III_URL", "ws://localhost:49134"),
     InitOptions(worker_name="inference-worker"),
 )
 logger = Logger()
 
-# 1. Install dependencies
-# pip install transformers accelerate gguf torch
 
-
-model_id = "ggml-org/gemma-3-270m-GGUF" # "Qwen/Qwen3-0.6B-GGUF"
-gguf_file = "gemma-3-270m-Q8_0.gguf" # "Qwen3-0.6B-Q8_0.gguf"  # Q8 quantized variant
-
-# 2. Load tokenizer and model from the GGUF file
-tokenizer = AutoTokenizer.from_pretrained(model_id, gguf_file=gguf_file)
-model = AutoModelForCausalLM.from_pretrained(model_id, gguf_file=gguf_file)
-
-tokenizer.chat_template = ("""{{ bos_token }}
-{%- if messages[0]['role'] == 'system' -%}
-    {%- if messages[0]['content'] is string -%}
-        {%- set first_user_prefix = messages[0]['content'] + '
-
-' -%}
-    {%- else -%}
-        {%- set first_user_prefix = messages[0]['content'][0]['text'] + '
-
-' -%}
-    {%- endif -%}
-    {%- set loop_messages = messages[1:] -%}
-{%- else -%}
-    {%- set first_user_prefix = "" -%}
-    {%- set loop_messages = messages -%}
-{%- endif -%}
-{%- for message in loop_messages -%}
-    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}
-        {{ raise_exception("Conversation roles must alternate user/assistant/user/assistant/...") }}
-    {%- endif -%}
-    {%- if (message['role'] == 'assistant') -%}
-        {%- set role = "model" -%}
-    {%- else -%}
-        {%- set role = message['role'] -%}
-    {%- endif -%}
-    {{ '<start_of_turn>' + role + '
-' + (first_user_prefix if loop.first else "") }}
-    {%- if message['content'] is string -%}
-        {{ message['content'] | trim }}
-    {%- elif message['content'] is iterable -%}
-        {%- for item in message['content'] -%}
-            {%- if item['type'] == 'image' -%}
-                {{ '<start_of_image>' }}
-            {%- elif item['type'] == 'text' -%}
-                {{ item['text'] | trim }}
-            {%- endif -%}
-        {%- endfor -%}
-    {%- else -%}
-        {{ raise_exception("Invalid content type") }}
-    {%- endif -%}
-    {{ '<end_of_turn>
-' }}
-{%- endfor -%}
-{%- if add_generation_prompt -%}
-    {{'<start_of_turn>model
-'}}
-{%- endif -%}""")
-
-def run_inference_handler(payload: Dict[str, str | List[Dict[str, Any]]]) -> Dict[str, str]:
-    messages = payload.get("messages", [])
-
-    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer(text, return_tensors="pt").to(model.device)
-
-    output = model.generate(**inputs, max_new_tokens=256)
-    result = tokenizer.decode(output[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
-
-    logger.info(f"inference::run_inference generated {len(result)} characters")
-    return {"text": result}
+def run_inference_handler(payload: dict[str, Any]) -> dict[str, str]:
+    result = runtime.run(payload)
+    logger.info(f"inference::run_inference generated {len(result['text'])} characters")
+    return result
 
 
 iii.register_function("inference::run_inference", run_inference_handler)
-
+iii.register_function("inference::health", lambda _: {"ready": True})
 print("Inference worker started - listening for calls")
+# Keep the main thread alive: interpreter shutdown otherwise closes executor
+# pools while the SDK's non-daemon event loop is still serving requests.
+threading.Event().wait()

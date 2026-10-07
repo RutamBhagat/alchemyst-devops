@@ -1,0 +1,33 @@
+# Local regression topology: same OCI services, same memory limits.
+services:
+  iii-engine:
+    platform: linux/amd64
+    extends:
+      file: api.compose.yaml
+      service: iii-engine
+  gateway-proxy:
+    platform: linux/amd64
+    extends:
+      file: api.compose.yaml
+      service: gateway-proxy
+    ports: !override
+      - "3111:80"
+  caller:
+    platform: linux/amd64
+    extends:
+      file: api.compose.yaml
+      service: caller
+  inference:
+    platform: linux/amd64
+    # 1/8 OCPU = 0.25 hardware-thread CPU on an x86 E2 micro.
+    cpus: 0.25
+    extends:
+      file: inference.compose.yaml
+      service: inference
+    environment:
+      III_URL: ws://iii-engine:49134
+    depends_on:
+      - iii-engine
+
+volumes:
+  hf-cache:

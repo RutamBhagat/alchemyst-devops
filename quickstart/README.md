@@ -4,7 +4,7 @@ A prototype that runs a small language model behind a distributed worker mesh. A
 
 | Worker             | Language   | Function                       | Does                                                                                          |
 | ------------------ | ---------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `inference-worker` | Python     | `inference::run_inference`     | Loads `gemma-3-270m` (GGUF, Q8) via `transformers`, applies the chat template to `messages`, and returns the decoded model output. |
+| `inference-worker` | Python     | `inference::run_inference`     | Loads `gemma-3-270m` (GGUF, Q8) via `llama-cpp-python`, preserves the Gemma chat template, and returns quantized CPU inference as `{ "text": "..." }`. The context is 2048 tokens with up to 256 output tokens. |
 | `caller-worker`    | TypeScript | `inference::get_response`      | Calls `inference::run_inference` with the incoming `messages` payload and returns the result. |
 | `caller-worker`    | TypeScript | `http::run_inference_over_http` | HTTP trigger bound to `POST /v1/chat/completions`; forwards the request body to `inference::get_response` and returns a JSON HTTP response. |
 
