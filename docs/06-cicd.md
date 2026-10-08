@@ -9,6 +9,7 @@ The production pipeline deliberately does not use OCIR, Docker Hub, GHCR, or ano
 - Pulumi TypeScript typecheck and mocked two-micro/load-balancer regression
 - caller TypeScript install/build
 - Python syntax check
+- deployment CI-gate regressions
 - Docker Compose validation
 - real local builds of all four images
 - Python prompt/cache/serialized-generation regressions
@@ -33,18 +34,20 @@ This is more reproducible than following `main`, but it is not equivalent to an 
 
 ## Production deployment
 
-`.github/workflows/deploy-oci.yml` runs only after the `CI` workflow succeeds on `main`, unless manually dispatched. Automatic deployment is additionally gated by repository variable `ENABLE_OCI_DEPLOY=true`.
+`.github/workflows/deploy-oci.yml` runs only through manual `workflow_dispatch`. CI still runs automatically on pull requests and pushes to `main`; successful CI never deploys automatically.
+
+Before running Pulumi, the workflow resolves `deploy_ref` to an exact commit SHA and requires its latest `ci.yml` push run on `main` to have completed successfully. Missing, pending, skipped, or failed CI blocks deployment. Both the checked-out infrastructure and `DEPLOY_REF` use that verified SHA, so a moving ref cannot change the deployment after verification.
 
 The deployment:
 
 1. reads the previous `deployedRef` stack output,
-2. runs `pulumi up` with the successful CI commit as `DEPLOY_REF`,
+2. runs `pulumi up` with the manually selected, CI-verified commit as `DEPLOY_REF`,
 3. waits for `/health` to verify the loaded inference worker (up to an hour for initial micro builds),
 4. runs the shared smoke test: real inference, invalid input HTTP 400, the 1 MiB body limit, and the existing empty-messages failure contract,
 5. verifies public TCP/49134 is closed,
 6. attempts the previous `deployedRef` automatically if smoke verification fails.
 
-Manual `workflow_dispatch` accepts `deploy_ref`, so a known-good commit can be redeployed explicitly.
+To deploy or roll back, open **Actions → Deploy OCI → Run workflow** and enter a known-good commit SHA or tag as `deploy_ref`. The revision must have passed CI on `main`. Select a workflow branch containing the verification helper.
 
 ## GitHub configuration
 
@@ -66,7 +69,6 @@ Recommended repository/environment variables:
 ```text
 PULUMI_STACK=dev
 ENABLE_OCI_PREVIEW=true
-ENABLE_OCI_DEPLOY=true
 ```
 
 The Pulumi stack itself still owns non-secret deployment configuration such as `compartmentId`, `availabilityDomain`, and `repositoryUrl`.

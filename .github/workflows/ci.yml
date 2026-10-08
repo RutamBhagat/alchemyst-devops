@@ -36,6 +36,8 @@ jobs:
           npm --prefix quickstart/workers/caller-worker run build
       - name: Check Python worker
         run: python -m compileall -q quickstart/workers/inference-worker
+      - name: Test deployment CI gate
+        run: node --test deploy/verify-ci.test.cjs
       - name: Validate Compose
         run: |
           for file in deploy/docker/*.compose.yaml; do

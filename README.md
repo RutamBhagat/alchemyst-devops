@@ -130,6 +130,6 @@ The Dockerfiles still pull public base images (`ubuntu`, `nginx`, `node`, `pytho
 
 ## Production Hardening
 
-CI/CD now covers build validation, vulnerability reporting, SBOM generation, commit-pinned deployment, smoke verification, and rollback to the previous deployed commit. Remaining production hardening includes TLS, authentication/rate limiting, managed observability, secret management, least-privilege instance identities, request limits/timeouts, and immutable prebuilt application artifacts if a registry/artifact service is later accepted.
+CI/CD now covers build validation, vulnerability reporting, SBOM generation, manual commit-pinned deployment gated by successful CI, smoke verification, and rollback to the previous deployed commit. Remaining production hardening includes TLS, authentication/rate limiting, managed observability, secret management, least-privilege instance identities, request limits/timeouts, and immutable prebuilt application artifacts if a registry/artifact service is later accepted.
 
 If the model were 100x larger, inference would move to GPU-backed serving such as vLLM/TGI with pre-staged weights, independent autoscaling, queueing/backpressure, and streaming. The public/private network boundary remains the same.
