@@ -1,6 +1,39 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as pulumi from "@pulumi/pulumi";
+import { dockerCloudInit } from "../common";
+import { createHash } from "node:crypto";
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+
+test("private source archive checksum gates extraction and container startup", () => {
+  const dir = mkdtempSync(join(tmpdir(), "alchemyst-source-test-"));
+  mkdirSync(join(dir, "source"));
+  mkdirSync(join(dir, "bin"));
+  writeFileSync(join(dir, "source", "fixture"), "working tree");
+  execFileSync("tar", ["-czf", join(dir, "source.tgz"), "-C", join(dir, "source"), "."]);
+  const digest = createHash("sha256").update(readFileSync(join(dir, "source.tgz"))).digest("hex");
+  writeFileSync(join(dir, "bin", "curl"), `#!/bin/sh\ncp '${dir}/source.tgz' '${dir}/download.tgz'\n`, { mode: 0o755 });
+  writeFileSync(join(dir, "bin", "docker"), `#!/bin/sh\ntouch '${dir}/started'\n`, { mode: 0o755 });
+  writeFileSync(join(dir, "bin", "timeout"), '#!/bin/sh\nshift\nexec "$@"\n', { mode: 0o755 });
+  const run = (sha256: string, target: string) => {
+    const init = dockerCloudInit("inference", "unused", "unused", { url: "https://example.com/private.tgz", sha256 });
+    const commands = init.split("\n").filter((line) => line.startsWith("  - [")).map((line) => JSON.parse(line.slice(4)));
+    const script = commands.find((args) => args[0] === "bash")[2]
+      .replaceAll("/tmp/source.tar.gz", join(dir, "download.tgz"))
+      .replaceAll("/opt/devops-assignment", join(dir, target));
+    return spawnSync("bash", ["-ec", script], { env: { ...process.env, PATH: `${dir}/bin:${process.env.PATH}` } });
+  };
+  assert.notEqual(run("0".repeat(64), "rejected").status, 0);
+  assert.equal(existsSync(join(dir, "rejected")), false);
+  assert.equal(existsSync(join(dir, "started")), false);
+  const accepted = run(digest, "accepted");
+  assert.equal(accepted.status, 0, accepted.stderr.toString());
+  assert.equal(readFileSync(join(dir, "accepted", "fixture"), "utf8"), "working tree");
+  assert.equal(existsSync(join(dir, "started")), true);
+});
 
 const resources: pulumi.runtime.MockResourceArgs[] = [];
 let backendReady: () => void;

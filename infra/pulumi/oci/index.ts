@@ -9,6 +9,8 @@ const repositoryUrl = config.require("repositoryUrl");
 const deployRef = process.env.DEPLOY_REF ?? config.get("deployRef") ?? "main";
 const sshAuthorizedKey = config.get("sshAuthorizedKey");
 const sshAllowedCidr = config.get("sshAllowedCidr");
+const sourceArchiveUrl = config.getSecret("sourceArchiveUrl");
+const sourceArchiveSha256 = sourceArchiveUrl ? config.require("sourceArchiveSha256") : undefined;
 // Fixed shapes/bandwidth prevent an override from silently leaving Always Free.
 const shape = "VM.Standard.E2.1.Micro";
 const imageId = config.get("amdImageId") ?? oci.core.getImages({
@@ -99,7 +101,10 @@ if (sshAllowedCidr) {
 }
 function createInstance(name: string, privateIp: string, nsg: oci.core.NetworkSecurityGroup, role: DeploymentRole): oci.core.Instance {
   const metadata: Record<string, pulumi.Input<string>> = {
-    user_data: Buffer.from(dockerCloudInit(role, repositoryUrl, deployRef)).toString("base64"),
+    user_data: sourceArchiveUrl
+      ? sourceArchiveUrl.apply((url) => Buffer.from(dockerCloudInit(role, repositoryUrl, deployRef,
+        { url, sha256: sourceArchiveSha256! })).toString("base64"))
+      : Buffer.from(dockerCloudInit(role, repositoryUrl, deployRef)).toString("base64"),
   };
   if (sshAuthorizedKey) metadata.ssh_authorized_keys = sshAuthorizedKey;
   return new oci.core.Instance(name, {
@@ -141,3 +146,8 @@ export const apiUrl = pulumi.interpolate`http://${apiIp}/v1/chat/completions`;
 export const apiPrivateIp = api.privateIp;
 export const callerPrivateIp = api.privateIp;
 export const inferencePrivateIp = inference.privateIp;
+export const apiInstanceId = api.id;
+export const inferenceInstanceId = inference.id;
+export const vcnId = vcn.id;
+export const privateSubnetId = privateSubnet.id;
+export const loadBalancerId = loadBalancer.id;

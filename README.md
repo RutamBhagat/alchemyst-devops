@@ -106,6 +106,8 @@ Pulumi selects the newest compatible **Canonical Ubuntu 24.04 Minimal** x86 plat
 
 The inference worker keeps Gemma 3 270M Q8 quantized via llama.cpp, with a 2048-token context and 256-token output cap. Its container is limited to 768 MiB, leaving RAM for the host. Requests can take minutes on the micro's shared CPU; timeouts are sized accordingly. Test the real mesh locally (AMD64, production memory limits, 0.25-vCPU inference quota):
 
+Inference uses the checksum-pinned official `llama-cpp-python` 0.3.19 CPU wheel on a pinned Alpine image with musl, libstdc++, and libgomp. Dependency downloads require binary packages; a missing wheel fails the build instead of compiling on the micro. Local Compose selects AMD64 inference explicitly, including on ARM development hosts.
+
 ```bash
 docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml up -d --build
 python3 deploy/smoke-test.py

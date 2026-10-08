@@ -15,6 +15,7 @@ services:
       context: ../..
       dockerfile: deploy/docker/caller.Dockerfile
   inference:
+    platform: linux/amd64
     image: alchemyst/inference:local
     build:
       context: ../..

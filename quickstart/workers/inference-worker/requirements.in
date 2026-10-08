@@ -1,4 +1,4 @@
 iii-sdk==0.24.4
 iii-helpers==0.24.4
-llama-cpp-python==0.3.36
+llama-cpp-python @ https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.19/llama_cpp_python-0.3.19-cp312-cp312-linux_x86_64.whl
 Jinja2==3.1.6

@@ -66,7 +66,11 @@ pulumi preview
 pulumi up
 ```
 
-Cloud-init creates 2 GiB of build-time swap, installs/enables Ubuntu's Docker Engine/Compose packages, clones the repository, checks out the configured `deployRef`/`DEPLOY_REF`, builds the role image(s) locally on each VM, and starts them. The revision must contain these changes (uncommitted local edits are not uploaded). Allow up to an hour for native compilation and model download on a micro. No application registry or `docker pull` of application images is involved. Changing the deployment ref replaces the fixed-IP VMs so cloud-init runs for the new revision.
+Cloud-init creates 2 GiB of host swap, installs/enables Ubuntu's Docker Engine/Compose packages, clones the repository, checks out the configured `deployRef`/`DEPLOY_REF`, builds the role image(s) locally on each VM, and starts them. The revision must contain these changes (uncommitted local edits are not uploaded). The inference image downloads a pinned official CPU wheel and never compiles llama.cpp. Each Compose build/start is bounded to 20 minutes; inspect cloud-init and Docker output if readiness stalls. No application registry or `docker pull` of application images is involved. Changing the deployment ref replaces the fixed-IP VMs so cloud-init runs for the new revision.
+
+For a private working-tree test without a GitHub push, upload a tar.gz source snapshot to a private OCI Object Storage bucket, create an expiring object-read PAR, and set `sourceArchiveUrl` as a **secret** Pulumi value and `sourceArchiveSha256` to the archive's SHA-256. The archive must contain the repository files directly at its root. This optional path replaces Git checkout: checksum verification must succeed before extraction and container startup. Keep the URL out of logs. Delete the PAR, object, and temporary bucket after the test; these CLI-created delivery resources are outside Pulumi state.
+
+Establish diagnostics before waiting for readiness. Temporary OCI Bastion port-forwarding sessions can reach the private VMs using `sshAuthorizedKey`; restrict `sshAllowedCidr` to the Bastion private endpoint's `/32` and its client allow list to your public IP's `/32`. This needs no instance Run Command IAM policy. Delete sessions and Bastion before destroying their target subnet.
 
 Smoke test:
 

@@ -56,8 +56,8 @@ jinja2==3.1.6 \
     # via
     #   -r requirements.in
     #   llama-cpp-python
-llama-cpp-python==0.3.36 \
-    --hash=sha256:832db0699007f1be95a7e41ef12e88926b02ba836461e36a36372db2760c1a2e
+llama-cpp-python @ https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.19/llama_cpp_python-0.3.19-cp312-cp312-linux_x86_64.whl \
+    --hash=sha256:ca1b372a3f5b30dcd0a73179a33b0f675adbb805bc64f6f656f208a71ff631d4
     # via -r requirements.in
 markupsafe==3.0.3 \
     --hash=sha256:0303439a41979d9e74d18ff5e2dd8c43ed6c6001fd40e5bf2e43f7bd9bbc523f \

@@ -1,5 +1,6 @@
 services:
   inference:
+    platform: linux/amd64
     image: alchemyst/inference:local
     build:
       context: ../..
