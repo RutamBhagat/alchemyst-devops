@@ -66,28 +66,28 @@ jobs:
           docker compose -p e2-test -f deploy/docker/e2-test.compose.yaml stop inference
           python3 -c 'import runpy; t=runpy.run_path("deploy/smoke-test.py"); assert t["request"](t["HEALTH_URL"]) == (503, {"ready": False})'
       - name: Scan iii engine
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: alchemyst/iii-engine:local
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '0'
       - name: Scan gateway proxy
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: alchemyst/gateway-proxy:local
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '0'
       - name: Scan caller
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: alchemyst/caller:local
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: '0'
       - name: Scan inference
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: alchemyst/inference:local
           severity: CRITICAL,HIGH
